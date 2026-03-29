@@ -38,6 +38,49 @@ interface DataDashboardProps {
 }
 
 export function DataDashboard({ skillsData, totalXP, level }: DataDashboardProps) {
+
+  const activityLogs = [
+    { id: 1, timestamp: '2024-03-29 14:30', type: '技能升级', content: 'React Hooks 熟练度提升至 LV.5', xp: 500 },
+    { id: 2, timestamp: '2024-03-29 10:15', type: '任务完成', content: '完成“手写一个 Promise”挑战', xp: 300 },
+    { id: 3, timestamp: '2024-03-28 22:00', type: '日常练习', content: '连续登录第 42 天奖励', xp: 100 },
+    { id: 4, timestamp: '2024-03-28 15:45', type: '项目里程碑', content: '星盘技能树组件初版上线', xp: 1200 },
+  ];
+
+
+  // 在 DataDashboard.tsx 内部新增或作为独立文件
+const LearningTimeline = ({ logs }: { logs: any[] }) => {
+  return (
+    <div className="relative pl-6 border-l-2 border-slate-700 space-y-8 py-2">
+      {logs.map((log, index) => (
+        <motion.div 
+          key={log.id}
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: index * 0.1 }}
+          className="relative"
+        >
+          {/* 时间轴小圆点 */}
+          <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-slate-900 border-2 border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+          
+          <div className="flex flex-col">
+            <span className="text-xs text-slate-500 font-mono mb-1">{log.timestamp}</span>
+            <div className="bg-slate-800/40 p-3 rounded-lg border border-slate-700/50 hover:border-blue-500/30 transition-colors">
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-400">
+                  {log.type}
+                </Badge>
+                <h4 className="text-sm font-medium text-slate-200">{log.content}</h4>
+              </div>
+              <p className="text-xs text-slate-400">获得经验: <span className="text-green-400">+{log.xp} XP</span></p>
+            </div>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+};
+
+
   // Prepare radar chart data
   const radarData = [
     { subject: '前端开发', value: skillsData.frontend, fullMark: 100 },
@@ -105,7 +148,28 @@ export function DataDashboard({ skillsData, totalXP, level }: DataDashboardProps
 
   return (
     <div className="space-y-6">
-      {/* Top Stats */}
+      {/* Top Stats */}\
+
+
+
+      {/* 新增的 LearningTimeline 区域 */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 1.0 }}
+      >
+        <Card className="bg-slate-800/50 border-blue-500/30">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <Activity className="w-6 h-6 text-blue-400" />
+              成长足迹 (Learning Timeline)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            <LearningTimeline logs={activityLogs} />
+          </CardContent>
+        </Card>
+      </motion.div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
