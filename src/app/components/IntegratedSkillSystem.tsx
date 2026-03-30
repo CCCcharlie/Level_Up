@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StarConstellationSkillTree } from './StarConstellationSkillTree';
-import { EnhancedTaskCenter } from './EnhancedTaskCenter';
-import { CustomProjectSystem } from './CustomProjectSystem';
+import EnhancedTaskCenter from './EnhancedTaskCenter';
+import CustomProjectSystem from './CustomProjectSystem';
 import { EquipmentSystem, Equipment } from './EquipmentSystem';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Star, Target, FolderKanban, Award, Code, Server, Database, Brain, Cloud, Shield } from 'lucide-react';
@@ -224,3 +224,5 @@ export function IntegratedSkillSystem({
     </div>
   );
 }
+
+export default IntegratedSkillSystem;
