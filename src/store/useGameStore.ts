@@ -1,193 +1,114 @@
 import { create } from 'zustand';
 
-interface Progress {
-  [skill: string]: number;
-}
+// --- 类型定义 ---
 
-interface RoadmapNode {
+export type TargetLevel = 'Junior' | 'Mid' | 'Senior';
+
+export interface RoadmapNode {
   id: string;
-  title: string;                    // 节点名称
-  focus: string;                    // 核心痛点 / 面试常考点描述
-  status: 'locked' | 'active' | 'completed';
-  tasks: string[];                  // 关联的任务数组
+  label: string;
+  description: string;
+  status: 'locked' | 'current' | 'completed';
+  requiredXP: number;
 }
 
 interface GameState {
-  // 原有状态
+  // 1. 职业定锚状态 (PRD 3.1)
+  careerDirection: string | null;     // 职业方向 (如: 前端, 后端)
+  userTargetLevel: TargetLevel;      // 目标段位
+  isOnboarded: boolean;              // 是否完成引导
+
+  // 2. 核心进度与经验值 (PRD 3.3)
+  totalExp: number;
   level: number;
-  exp: number;
-  currentTasks: string[];
-  progress: Progress;
+  skillPoints: number;
 
-  // 新增：动态学习路线图（PRD 要求）
-  dynamicRoadmap: RoadmapNode[];
-  activeRoadmapNodeId: string | null;
+  // 3. AI 生成的动态数据 (PRD 3.2)
+  gapNodes: string[];                // 星盘中需要高亮的缺口技能 ID
+  dynamicRoadmap: RoadmapNode[];     // 逻辑先后顺序的学习路线
 
-  // 原有方法
-  setLevel: (level: number) => void;
-  setExp: (exp: number) => void;
+  // --- Actions ---
+  
+  // 更新经验值并自动计算等级 (保留原逻辑)
   addExp: (amount: number) => void;
-  setCurrentTasks: (tasks: string[]) => void;
-  addTask: (task: string) => void;
-  removeTask: (task: string) => void;
-  trackProgress: (skill: string, progressAmount: number) => void;
-  getLearningFocus: () => string;
-
-  // 新增 / 修改方法（PRD 要求）
-  setTargetLevel: (target: 'Junior' | 'Mid' | 'Senior') => void;
-  setActiveRoadmapNode: (id: string | null) => void;
+  
+  // 核心重构：双重定锚方法 (PRD 3.1)
+  setTargetLevel: (direction: string, level: TargetLevel) => void;
+  
+  // 重置系统
+  resetOnboarding: () => void;
 }
 
-/**
- * Mock 数据生成函数（后续可替换为真实 AI 调用）
- * 根据目标等级生成不同的动态路线图节点
- */
-const generateDynamicRoadmap = (target: 'Junior' | 'Mid' | 'Senior'): RoadmapNode[] => {
-  const baseId = Date.now().toString();
+// --- Store 实现 ---
 
-  if (target === 'Junior') {
-    return [
-      {
-        id: `${baseId}-1`,
-        title: '基础语法避坑',
-        focus: '掌握 JavaScript/TypeScript 核心语法，规避常见面试陷阱与隐式转换问题',
-        status: 'active',
-        tasks: ['变量提升与作用域', 'this 指向与箭头函数', '类型守卫与类型收窄'],
-      },
-      {
-        id: `${baseId}-2`,
-        title: '高频面试八股文',
-        focus: '梳理前端高频基础知识点，形成系统化面试答案框架',
-        status: 'locked',
-        tasks: ['事件循环与异步', '闭包与内存泄漏', '原型链与继承'],
-      },
-      {
-        id: `${baseId}-3`,
-        title: 'Git 与团队协作',
-        focus: '掌握版本控制与分支管理，提升团队开发效率',
-        status: 'locked',
-        tasks: ['Git 工作流', '代码审查规范', '分支合并策略'],
-      },
-      {
-        id: `${baseId}-4`,
-        title: 'React 基础组件开发',
-        focus: '熟练使用 React 构建可复用组件',
-        status: 'locked',
-        tasks: ['Hooks 使用规范', '组件通信', '条件渲染与列表优化'],
-      },
-    ];
-  }
-
-  if (target === 'Mid') {
-    return [
-      {
-        id: `${baseId}-1`,
-        title: '组件库源码剖析',
-        focus: '深入理解 Ant Design / Material UI 等主流组件库的实现原理',
-        status: 'active',
-        tasks: ['组件封装思想', '受控与非受控', '性能优化技巧'],
-      },
-      {
-        id: `${baseId}-2`,
-        title: '性能调优实战',
-        focus: '定位并解决前端性能瓶颈，提升页面流畅度',
-        status: 'locked',
-        tasks: ['React.memo 与 useCallback', '虚拟列表实现', '渲染优化策略'],
-      },
-      {
-        id: `${baseId}-3`,
-        title: '工程化基建',
-        focus: '构建现代前端工程化体系',
-        status: 'locked',
-        tasks: ['Monorepo 架构', 'CI/CD 流水线', '代码规范与 Lint'],
-      },
-    ];
-  }
-
-  // Senior
-  return [
-    {
-      id: `${baseId}-1`,
-      title: '微前端架构设计',
-      focus: '设计可扩展的微前端解决方案，解决大型应用治理难题',
-      status: 'active',
-      tasks: ['Module Federation', '应用隔离方案', '路由与状态共享'],
-    },
-    {
-      id: `${baseId}-2`,
-      title: '系统设计与高并发',
-      focus: '从 0 到 1 完成复杂系统设计，应对高并发场景',
-      status: 'locked',
-      tasks: ['秒杀系统设计', '缓存与限流', '分布式一致性'],
-    },
-    {
-      id: `${baseId}-3`,
-      title: '技术债治理与架构演进',
-      focus: '系统性重构遗留系统，推动技术栈升级',
-      status: 'locked',
-      tasks: ['遗留代码评估', '增量重构策略', '架构决策记录'],
-    },
-  ];
-};
-
-const useGameStore = create<GameState>()((set, get) => ({
-  // 原有初始状态
-  level: 1,
-  exp: 0,
-  currentTasks: [],
-  progress: {},
-
-  // 新增初始状态
+export const useGameStore = create<GameState>((set, get) => ({
+  // 初始状态
+  careerDirection: null,
+  userTargetLevel: 'Junior',
+  isOnboarded: false,
+  totalExp: 3250,
+  level: 8,
+  skillPoints: 15,
+  gapNodes: [],
   dynamicRoadmap: [],
-  activeRoadmapNodeId: null,
 
-  setLevel: (level) => set({ level }),
-  setExp: (exp) => set({ exp }),
-  addExp: (amount) => set((state) => ({ exp: state.exp + amount })),
-
-  setCurrentTasks: (tasks) => set({ currentTasks: tasks }),
-  addTask: (task) => set((state) => ({ currentTasks: [...state.currentTasks, task] })),
-  removeTask: (task) => set((state) => ({
-    currentTasks: state.currentTasks.filter((t) => t !== task),
-  })),
-
-  trackProgress: (skill, progressAmount) => set((state) => ({
-    progress: {
-      ...state.progress,
-      [skill]: (state.progress[skill] || 0) + progressAmount,
-    },
-  })),
-
-  getLearningFocus: () => {
-    const { progress } = get();
-    const skills = Object.keys(progress);
-    if (skills.length === 0) return "No skills tracked yet.";
-    return skills.reduce((a, b) => (progress[a] < progress[b] ? a : b));
-  },
-
-  // 重构核心：setTargetLevel（根据 PRD 生成动态路线图）
-  setTargetLevel: (target) => {
-    const newRoadmap = generateDynamicRoadmap(target);
-
-    set({
-      dynamicRoadmap: newRoadmap,
-      // 默认激活第一个节点
-      activeRoadmapNodeId: newRoadmap.length > 0 ? newRoadmap[0].id : null,
-      // 可选：根据等级调整玩家等级（根据实际业务决定是否需要）
-      // level: target === 'Junior' ? 1 : target === 'Mid' ? 10 : 20,
+  // 经验值累加逻辑
+  addExp: (amount) => {
+    const newTotal = get().totalExp + amount;
+    // 简单的等级计算公式：每 1000 XP 升一级
+    const newLevel = Math.floor(newTotal / 1000) + 1;
+    set({ 
+      totalExp: newTotal,
+      level: newLevel
     });
   },
 
-  // 新增：切换当前正在攻克的路线图节点
-  setActiveRoadmapNode: (id) => {
-    // 可加入校验：id 必须存在于当前 roadmap 中
-    const { dynamicRoadmap } = get();
-    const exists = dynamicRoadmap.some((node) => node.id === id);
+  // 重写 setTargetLevel：实现“AI 觉醒”逻辑
+  setTargetLevel: (direction, level) => {
+    // 根据职业和等级生成的 Mock 数据逻辑
+    let mockRoadmap: RoadmapNode[] = [];
+    let mockGapNodes: string[] = [];
 
-    if (id === null || exists) {
-      set({ activeRoadmapNodeId: id });
+    // 根据不同段位生成路线图 (PRD Mock 逻辑)
+    if (level === 'Junior') {
+      mockRoadmap = [
+        { id: 'j1', label: '核心基础构建', description: '掌握语言底层原理与核心语法', status: 'current', requiredXP: 500 },
+        { id: 'j2', label: '版本控制专家', description: 'Git 协同开发与分流策略', status: 'locked', requiredXP: 800 },
+        { id: 'j3', label: '初级实战工程', description: '独立完成模块化组件开发', status: 'locked', requiredXP: 1200 },
+      ];
+      mockGapNodes = ['base_syntax', 'git_flow', 'component_logic'];
+    } else if (level === 'Mid') {
+      mockRoadmap = [
+        { id: 'm1', label: '架构模式实践', description: '深入理解 MVC/MVVM 与设计模式', status: 'current', requiredXP: 2000 },
+        { id: 'm2', label: '性能优化专项', description: '全链路性能瓶颈分析与调优', status: 'locked', requiredXP: 2500 },
+        { id: 'm3', label: '工程化体系建设', description: 'CI/CD 流水线与自动化测试', status: 'locked', requiredXP: 3000 },
+      ];
+      mockGapNodes = ['design_patterns', 'perf_optimization', 'ci_cd'];
+    } else {
+      mockRoadmap = [
+        { id: 's1', label: '系统架构演进', description: '从单体到微服务的分布式决策', status: 'current', requiredXP: 5000 },
+        { id: 's2', label: '技术选型方法论', description: '复杂业务场景下的技术栈评估', status: 'locked', requiredXP: 6000 },
+        { id: 's3', label: '团队技术领导力', description: '技术架构委员会与标准制定', status: 'locked', requiredXP: 8000 },
+      ];
+      mockGapNodes = ['dist_systems', 'tech_strategy', 'leadership'];
     }
+
+    // 更新状态
+    set({
+      careerDirection: direction,
+      userTargetLevel: level,
+      isOnboarded: true,
+      dynamicRoadmap: mockRoadmap,
+      gapNodes: mockGapNodes
+    });
   },
+
+  resetOnboarding: () => set({ 
+    isOnboarded: false, 
+    careerDirection: null, 
+    dynamicRoadmap: [], 
+    gapNodes: [] 
+  }),
 }));
 
 export default useGameStore;

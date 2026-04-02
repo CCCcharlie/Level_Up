@@ -1,382 +1,151 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import { Checkbox } from './ui/checkbox';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Rocket, 
-  Code, 
-  Palette, 
-  Database, 
-  Cloud, 
-  Smartphone,
-  Brain,
-  LineChart,
-  Shield,
-  ArrowRight,
-  Sparkles,
-  CheckCircle2
-} from 'lucide-react';
+import { Sparkles, Terminal, Code2, Database, Layout, Loader2 } from 'lucide-react';
+import { Button } from './ui/button';
+import { Card, CardContent } from './ui/card';
+import { useGameStore, TargetLevel } from '../../store/useGameStore'; // 引入重构后的 Store
 
-interface Career {
-  id: string;
-  name: string;
-  icon: React.ReactNode;
-  description: string;
-  skills: string[];
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-  salary: string;
-  demand: number;
-  color: string;
-}
+// 职业方向配置 (PRD Step 1)
+const CAREER_DIRECTIONS = [
+  { id: 'frontend', title: '前端开发', icon: <Layout />, desc: '构建极致的用户体验与视觉艺术' },
+  { id: 'backend', title: '后端架构', icon: <Database />, desc: '设计高并发、分布式的系统脊梁' },
+  { id: 'fullstack', title: '全栈独立开发', icon: <Terminal />, desc: '一人分饰多角，实现完整的产品愿景' },
+];
 
-interface CareerOnboardingProps {
-  onComplete: (selectedCareers: string[]) => void;
-}
+// 目标段位配置 (PRD Step 2)
+const TARGET_LEVELS: { id: TargetLevel; title: string; desc: string }[] = [
+  { id: 'Junior', title: '初级 (Junior)', desc: '掌握核心语法，能够交付标准模块' },
+  { id: 'Mid', title: '中级 (Mid)', desc: '理解工程化体系，具备架构拆解能力' },
+  { id: 'Senior', title: '高级 (Senior)', desc: '驱动技术变革，主导复杂系统演进' },
+];
 
-export function CareerOnboarding({ onComplete }: CareerOnboardingProps) {
-  const [step, setStep] = useState(0);
-  const [selectedCareers, setSelectedCareers] = useState<string[]>([]);
+export function CareerOnboarding() {
+  const [step, setStep] = useState(1);
+  const [direction, setDirection] = useState<string | null>(null);
+  const [level, setLevel] = useState<TargetLevel | null>(null);
+  const [isAwakening, setIsAwakening] = useState(false);
 
-  const careers: Career[] = [
-    {
-      id: 'frontend',
-      name: '前端开发工程师',
-      icon: <Code className="w-8 h-8" />,
-      description: '构建用户界面和交互体验，让网页更加美观易用',
-      skills: ['HTML/CSS', 'JavaScript', 'React/Vue', 'UI/UX设计'],
-      difficulty: 'beginner',
-      salary: '15-35K',
-      demand: 95,
-      color: 'from-blue-500 to-cyan-500',
-    },
-    {
-      id: 'backend',
-      name: '后端开发工程师',
-      icon: <Database className="w-8 h-8" />,
-      description: '负责服务器端逻辑、数据库设计和API开发',
-      skills: ['Java/Python', 'SQL/NoSQL', 'API设计', '系统架构'],
-      difficulty: 'intermediate',
-      salary: '18-40K',
-      demand: 92,
-      color: 'from-green-500 to-emerald-500',
-    },
-    {
-      id: 'fullstack',
-      name: '全栈开发工程师',
-      icon: <Rocket className="w-8 h-8" />,
-      description: '精通前后端技术，能够独立完成完整产品开发',
-      skills: ['前端框架', 'Node.js', '数据库', 'DevOps'],
-      difficulty: 'advanced',
-      salary: '25-50K',
-      demand: 88,
-      color: 'from-purple-500 to-pink-500',
-    },
-    {
-      id: 'mobile',
-      name: '移动开发工程师',
-      icon: <Smartphone className="w-8 h-8" />,
-      description: '开发iOS和Android应用，创建移动端体验',
-      skills: ['React Native', 'Flutter', 'Swift/Kotlin', '移动UI'],
-      difficulty: 'intermediate',
-      salary: '20-40K',
-      demand: 85,
-      color: 'from-orange-500 to-red-500',
-    },
-    {
-      id: 'ui-designer',
-      name: 'UI/UX设计师',
-      icon: <Palette className="w-8 h-8" />,
-      description: '设计用户界面和交互流程，提升用户体验',
-      skills: ['Figma/Sketch', '用户研究', '交互设计', '视觉设计'],
-      difficulty: 'beginner',
-      salary: '12-30K',
-      demand: 82,
-      color: 'from-pink-500 to-rose-500',
-    },
-    {
-      id: 'devops',
-      name: 'DevOps工程师',
-      icon: <Cloud className="w-8 h-8" />,
-      description: '负责自动化部署、持续集成和系统运维',
-      skills: ['Docker', 'Kubernetes', 'CI/CD', 'Linux'],
-      difficulty: 'advanced',
-      salary: '22-45K',
-      demand: 78,
-      color: 'from-teal-500 to-cyan-500',
-    },
-    {
-      id: 'ai-engineer',
-      name: 'AI/机器学习工程师',
-      icon: <Brain className="w-8 h-8" />,
-      description: '研究和开发人工智能解决方案，构建智能系统',
-      skills: ['Python', 'TensorFlow', '深度学习', '数据科学'],
-      difficulty: 'advanced',
-      salary: '30-60K',
-      demand: 90,
-      color: 'from-violet-500 to-purple-500',
-    },
-    {
-      id: 'data-analyst',
-      name: '数据分析师',
-      icon: <LineChart className="w-8 h-8" />,
-      description: '从数据中提取洞察，支持业务决策',
-      skills: ['SQL', 'Python/R', 'BI工具', '统计学'],
-      difficulty: 'intermediate',
-      salary: '15-35K',
-      demand: 86,
-      color: 'from-amber-500 to-orange-500',
-    },
-    {
-      id: 'security',
-      name: '网络安全工程师',
-      icon: <Shield className="w-8 h-8" />,
-      description: '保护系统和数据安全，防范网络攻击',
-      skills: ['渗透测试', '加密技术', '安全协议', '威胁分析'],
-      difficulty: 'advanced',
-      salary: '20-45K',
-      demand: 75,
-      color: 'from-red-500 to-pink-500',
-    },
-  ];
+  const { setTargetLevel } = useGameStore();
 
-  const toggleCareer = (careerId: string) => {
-    setSelectedCareers(prev => {
-      if (prev.includes(careerId)) {
-        return prev.filter(id => id !== careerId);
+  // 最终确认：触发 AI 觉醒动效 (PRD 1.5s 延迟)
+  const handleFinalConfirm = (selectedLevel: TargetLevel) => {
+    setLevel(selectedLevel);
+    setIsAwakening(true);
+
+    setTimeout(() => {
+      if (direction) {
+        setTargetLevel(direction, selectedLevel);
+        // Store 内部会自动设置 isOnboarded: true
       }
-      return [...prev, careerId];
-    });
-  };
-
-  const getDifficultyBadge = (difficulty: string) => {
-    switch (difficulty) {
-      case 'beginner':
-        return <Badge className="bg-green-500 text-white">入门友好</Badge>;
-      case 'intermediate':
-        return <Badge className="bg-yellow-500 text-white">中等难度</Badge>;
-      case 'advanced':
-        return <Badge className="bg-red-500 text-white">高级进阶</Badge>;
-      default:
-        return null;
-    }
-  };
-
-  const handleContinue = () => {
-    if (selectedCareers.length === 0) return;
-    
-    if (step === 0) {
-      setStep(1);
-    } else {
-      const careerNames = selectedCareers.map(id => 
-        careers.find(c => c.id === id)?.name || id
-      );
-      onComplete(careerNames);
-    }
+    }, 1500);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl">
-        <AnimatePresence mode="wait">
-          {step === 0 && (
-            <motion.div
-              key="welcome"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="text-center mb-8"
-            >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ type: 'spring', delay: 0.2 }}
-                className="inline-block mb-6"
-              >
-                <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center mx-auto">
-                  <Sparkles className="w-12 h-12 text-white" />
-                </div>
-              </motion.div>
-              
-              <h1 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600 mb-4">
-                欢迎来到技能树系统
-              </h1>
-              <p className="text-xl text-gray-300 mb-8">
-                选择你感兴趣的职业方向，我们将为你定制专属学习路径
-              </p>
-              <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-500/50 text-lg px-4 py-2">
-                💡 可以选择多个职业方向
-              </Badge>
-            </motion.div>
-          )}
-
-          {step === 1 && (
-            <motion.div
-              key="confirmation"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="text-center mb-8"
-            >
-              <CheckCircle2 className="w-16 h-16 text-green-400 mx-auto mb-4" />
-              <h1 className="text-5xl font-bold text-white mb-4">
-                太棒了！准备开始你的学习之旅
-              </h1>
-              <p className="text-xl text-gray-300">
-                你选择了 {selectedCareers.length} 个职业方向
-              </p>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Career Selection Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          {careers.map((career, index) => {
-            const isSelected = selectedCareers.includes(career.id);
-            
-            return (
-              <motion.div
-                key={career.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Card
-                  className={`cursor-pointer transition-all hover:scale-105 bg-slate-800/50 backdrop-blur-sm border-2 ${
-                    isSelected
-                      ? 'ring-4 ring-purple-500 border-purple-500 bg-gradient-to-br ' + career.color + ' bg-opacity-20'
-                      : 'border-slate-700 hover:border-purple-500/50'
-                  }`}
-                  onClick={() => toggleCareer(career.id)}
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 overflow-hidden font-sans">
+      {/* 背景动态光晕 */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_-20%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
+      
+      <AnimatePresence mode="wait">
+        {/* Step 1: 职业方向选择 */}
+        {step === 1 && !isAwakening && (
+          <motion.div
+            key="step1"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="w-full max-w-4xl text-center z-10"
+          >
+            <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8 tracking-wider">
+              第一步：定锚你的职业维度
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {CAREER_DIRECTIONS.map((item) => (
+                <Card 
+                  key={item.id}
+                  onClick={() => { setDirection(item.id); setStep(2); }}
+                  className="group bg-slate-900/50 border-slate-800 hover:border-blue-500/50 cursor-pointer transition-all duration-500 hover:shadow-[0_0_20px_rgba(59,130,246,0.2)]"
                 >
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className={`p-3 rounded-xl bg-gradient-to-br ${career.color} text-white`}>
-                        {career.icon}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isSelected && (
-                          <motion.div
-                            initial={{ scale: 0 }}
-                            animate={{ scale: 1 }}
-                          >
-                            <CheckCircle2 className="w-6 h-6 text-green-400" />
-                          </motion.div>
-                        )}
-                        <Checkbox
-                          checked={isSelected}
-                          onCheckedChange={() => toggleCareer(career.id)}
-                          className="w-5 h-5"
-                        />
-                      </div>
+                  <CardContent className="p-8 flex flex-col items-center">
+                    <div className="p-4 rounded-2xl bg-slate-800 text-blue-400 mb-4 group-hover:scale-110 transition-transform">
+                      {item.icon}
                     </div>
+                    <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
+                    <p className="text-slate-400 text-sm">{item.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
-                    <h3 className="text-lg font-bold text-white mb-2">
-                      {career.name}
-                    </h3>
-                    
-                    <p className="text-sm text-gray-400 mb-3 line-clamp-2">
-                      {career.description}
-                    </p>
-
-                    <div className="flex items-center gap-2 mb-3">
-                      {getDifficultyBadge(career.difficulty)}
-                    </div>
-
-                    <div className="space-y-2 mb-3">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">薪资范围</span>
-                        <span className="text-green-400 font-semibold">{career.salary}</span>
-                      </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-400">市场需求</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 h-2 bg-gray-700 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-gradient-to-r from-green-500 to-emerald-500"
-                              style={{ width: `${career.demand}%` }}
-                            />
-                          </div>
-                          <span className="text-green-400 font-semibold">{career.demand}%</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="border-t border-gray-700 pt-3">
-                      <p className="text-xs text-gray-500 mb-2">核心技能</p>
-                      <div className="flex flex-wrap gap-1">
-                        {career.skills.slice(0, 3).map(skill => (
-                          <Badge
-                            key={skill}
-                            variant="secondary"
-                            className="text-xs bg-slate-700 text-gray-300"
-                          >
-                            {skill}
-                          </Badge>
-                        ))}
-                        {career.skills.length > 3 && (
-                          <Badge variant="secondary" className="text-xs bg-slate-700 text-gray-300">
-                            +{career.skills.length - 3}
-                          </Badge>
-                        )}
-                      </div>
+        {/* Step 2: 目标段位确认 */}
+        {step === 2 && !isAwakening && (
+          <motion.div
+            key="step2"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, scale: 1.1 }}
+            className="w-full max-w-4xl text-center z-10"
+          >
+            <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-8 tracking-wider">
+              第二步：锚定进化的终点
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {TARGET_LEVELS.map((item) => (
+                <Card 
+                  key={item.id}
+                  onClick={() => handleFinalConfirm(item.id)}
+                  className="group bg-slate-900/50 border-slate-800 hover:border-pink-500/50 cursor-pointer transition-all duration-500 hover:shadow-[0_0_20px_rgba(236,72,153,0.2)]"
+                >
+                  <CardContent className="p-8">
+                    <h3 className="text-xl font-bold text-white mb-2">{item.title}</h3>
+                    <p className="text-slate-400 text-sm mb-4">{item.desc}</p>
+                    <div className="h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full bg-pink-500 transition-all ${item.id === 'Junior' ? 'w-1/3' : item.id === 'Mid' ? 'w-2/3' : 'w-full'}`} />
                     </div>
                   </CardContent>
                 </Card>
-              </motion.div>
-            );
-          })}
-        </div>
-
-        {/* Action Buttons */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="flex justify-center gap-4"
-        >
-          {step === 1 && (
-            <Button
-              onClick={() => setStep(0)}
-              variant="outline"
-              className="border-slate-600 text-white hover:bg-slate-800"
-              size="lg"
-            >
-              返回修改
+              ))}
+            </div>
+            <Button variant="ghost" onClick={() => setStep(1)} className="text-slate-500 hover:text-white">
+              返回重选方向
             </Button>
-          )}
-          
-          <Button
-            onClick={handleContinue}
-            disabled={selectedCareers.length === 0}
-            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8"
-            size="lg"
-          >
-            {step === 0 ? (
-              <>
-                继续 ({selectedCareers.length} 个已选)
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </>
-            ) : (
-              <>
-                开始学习之旅
-                <Rocket className="w-5 h-5 ml-2" />
-              </>
-            )}
-          </Button>
-        </motion.div>
+          </motion.div>
+        )}
 
-        {selectedCareers.length === 0 && (
-          <motion.p
+        {/* AI 觉醒 Loading (PRD 核心动效) */}
+        {isAwakening && (
+          <motion.div
+            key="awakening"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-center text-gray-500 mt-4"
+            className="fixed inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center"
           >
-            请至少选择一个职业方向
-          </motion.p>
+            <motion.div
+              animate={{ 
+                scale: [1, 1.2, 1],
+                opacity: [0.5, 1, 0.5]
+              }}
+              transition={{ repeat: Infinity, duration: 2 }}
+              className="relative mb-8"
+            >
+              <div className="absolute inset-0 blur-2xl bg-blue-500/20 rounded-full" />
+              <Sparkles className="w-24 h-24 text-blue-400 relative z-10" />
+            </motion.div>
+            
+            <motion.div 
+              initial={{ width: 0 }}
+              animate={{ width: 300 }}
+              className="h-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-4"
+            />
+            
+            <p className="text-xl text-blue-100 font-medium tracking-widest animate-pulse">
+              AI 正在解析能力缺口，为你点亮专属星盘...
+            </p>
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   );
 }
+export default CareerOnboarding;

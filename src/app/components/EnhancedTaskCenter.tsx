@@ -1,11 +1,21 @@
 'use client';
 
-import useGameStore from '../../store/useGameStore';   // 正确相对路径
-import { Card } from './ui/card';
+import useGameStore from '../../store/useGameStore';
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Target } from 'lucide-react';
 
-const EnhancedTaskCenter = () => {
+interface EnhancedTaskCenterProps {
+  selectedSkill?: any;
+  allSkills?: any[];
+  onTaskComplete?: (taskId: string, rewards: { xp: number; skillPoints: number }) => void;
+}
+
+export default function EnhancedTaskCenter({
+  selectedSkill,
+  allSkills,
+  onTaskComplete,
+}: EnhancedTaskCenterProps) {
   const { dynamicRoadmap, activeRoadmapNodeId } = useGameStore();
 
   const activeNode = dynamicRoadmap.find((node) => node.id === activeRoadmapNodeId);
@@ -23,13 +33,10 @@ const EnhancedTaskCenter = () => {
 
   return (
     <div className="space-y-6">
-      {/* 当前攻克节点 Header */}
+      {/* PRD 要求的 Header */}
       <div className="border-b border-slate-700 pb-4">
         <div className="flex items-center gap-3 mb-2">
-          <Badge 
-            variant="secondary" 
-            className="bg-orange-900/30 text-orange-400 border-orange-400/50"
-          >
+          <Badge variant="secondary" className="bg-orange-900/30 text-orange-400 border-orange-400/50">
             当前攻克节点
           </Badge>
           <h2 className="text-2xl font-bold text-slate-100">{activeNode.title}</h2>
@@ -40,34 +47,34 @@ const EnhancedTaskCenter = () => {
         </p>
       </div>
 
-      {/* 任务列表 */}
+      {/* 节点专属任务列表 */}
       <div>
-        <h3 className="text-lg font-medium text-slate-200 mb-4 flex items-center gap-2">
-          推荐任务清单
-          <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-400">
-            ({activeNode.tasks.length})
-          </span>
+        <h3 className="text-lg font-medium text-slate-200 mb-4">
+          本节点专属任务 ({activeNode.tasks.length})
         </h3>
 
         <div className="grid gap-3">
           {activeNode.tasks.map((task, index) => (
-            <Card 
-              key={index} 
-              className="p-4 border-slate-700 hover:border-slate-500 transition-colors flex items-start gap-4"
-            >
+            <Card key={index} className="p-4 border-slate-700 hover:border-slate-500 transition-colors flex items-start gap-4">
               <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-xs font-mono text-slate-400 mt-0.5">
                 {index + 1}
               </div>
               <div className="flex-1">
-                <p className="text-slate-200 leading-relaxed">{task}</p>
+                <p className="text-slate-200">{task}</p>
                 <p className="text-xs text-slate-500 mt-1">完成可获得经验值 +15 XP</p>
               </div>
+              {onTaskComplete && (
+                <button
+                  onClick={() => onTaskComplete(`node-task-${index}`, { xp: 15, skillPoints: 3 })}
+                  className="px-4 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-md transition-colors"
+                >
+                  完成
+                </button>
+              )}
             </Card>
           ))}
         </div>
       </div>
     </div>
   );
-};
-
-export default EnhancedTaskCenter;
+}
