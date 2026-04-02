@@ -11,6 +11,8 @@ const LearningPathFlow = () => {
   const {
     dynamicRoadmap,
     userTargetLevel,
+    activeRoadmapNodeId,    // 取出当前激活 ID
+    setActiveRoadmapNode,   // 取出切换方法
     setTargetLevel,
   } = useGameStore();
 
@@ -44,7 +46,17 @@ const LearningPathFlow = () => {
       </div>
 
       <div className="space-y-12">
-        {dynamicRoadmap.map((node, index) => (
+        
+        
+        {dynamicRoadmap.map((node, index) => 
+        {const isActive = node.id === activeRoadmapNodeId;
+
+          
+          
+        return(
+          
+
+          
           <motion.div
             key={node.id}
             initial={{ opacity: 0, x: -20 }}
@@ -69,13 +81,13 @@ const LearningPathFlow = () => {
                   <Badge variant="outline" className="mb-2 text-[10px] uppercase tracking-tighter border-slate-700">
                     Step {index + 1} · {node.status}
                   </Badge>
-                  <h4 className="text-lg font-bold text-white leading-none">{node.label}</h4>
+                  <h4 className="text-lg font-bold text-white leading-none">{node.title}</h4>
                 </div>
                 {node.status === 'current' && <Flame className="w-5 h-5 text-orange-500 animate-pulse" />}
               </div>
               
               <p className="text-sm text-slate-400 leading-relaxed mb-4">
-                {node.description}
+                {node.focus}
               </p>
 
               {node.status === 'current' && (
@@ -89,7 +101,9 @@ const LearningPathFlow = () => {
               )}
             </Card>
           </motion.div>
-        ))}
+        )
+        }
+        )}
       </div>
     </div>
   );

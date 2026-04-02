@@ -9,27 +9,21 @@ import  CustomProjectSystem  from './components/CustomProjectSystem';
 // UI Components
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Progress } from './components/ui/progress';
-import { 
-  Zap, 
-  Map, 
-  Star, 
-  LayoutDashboard, 
-  Target, 
-  Trophy 
-} from 'lucide-react';
+import { Badge } from './components/ui/badge';
+import { Card } from './components/ui/card';
+import { Sparkles, Trophy, Zap, Target, MousePointer2 } from 'lucide-react';
 
-function App() {
-  // 从 Store 中提取核心状态
+export default function App() {
+  // 从 Store 获取全局状态
   const { 
     isOnboarded, 
-    userLevel, 
+    level, 
     totalExp, 
-    userTargetLevel,
-    addExp,
-    trackProgress
+    careerDirection, 
+    userTargetLevel 
   } = useGameStore();
 
-  // 1. 未入站状态守卫：全屏展示引导组件
+  // 如果未完成引导，显示入站界面
   if (!isOnboarded) {
     return <CareerOnboarding />;
   }
@@ -38,122 +32,103 @@ function App() {
   const expPercentage = (totalExp % 1000) / 10;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-50 flex flex-col font-sans selection:bg-purple-500/30">
+    // 整体背景应用径向渐变 (Sci-Fi 风格)
+    <div className="min-h-screen bg-slate-950 text-slate-200 selection:bg-purple-500/30">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(76,29,149,0.15)_0%,transparent_70%)] pointer-events-none" />
       
-      {/* 2. 顶部 User Header (控制台顶栏) */}
-      <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur-md">
-        <div className="flex h-16 items-center justify-between px-6">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 to-blue-600 shadow-lg shadow-purple-500/20">
-              <Zap className="h-6 w-6 text-white" />
+      <div className="container mx-auto px-4 py-6 max-w-[1600px] relative z-10">
+        
+        {/* --- 顶部全局经验条与状态 (PRD 3.3) --- */}
+        <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/40 p-4 rounded-2xl border border-slate-800 backdrop-blur-md">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="absolute -inset-1 bg-purple-500 rounded-full blur opacity-25 animate-pulse" />
+              <div className="w-14 h-14 rounded-full bg-slate-800 border-2 border-purple-500 flex items-center justify-center text-xl font-bold text-white relative">
+                {level}
+              </div>
             </div>
             <div>
-              <h1 className="text-lg font-black tracking-tight text-white uppercase">Level Up</h1>
-              <p className="text-[10px] font-medium text-slate-500 uppercase tracking-widest">AI Agent OS</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-8">
-            {/* 等级与经验条 */}
-            <div className="hidden md:flex flex-col items-end gap-1.5">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Current Level</span>
-                <span className="text-sm font-black text-purple-400">LV.{userLevel}</span>
-                <span className="text-[10px] font-bold text-slate-500 uppercase">{totalExp % 1000} / 1000 XP</span>
+              <div className="flex items-center gap-2 mb-1">
+                <h1 className="text-xl font-bold text-white tracking-tight">职业进化：{careerDirection}</h1>
+                <Badge className="bg-purple-600/20 text-purple-400 border-purple-500/30">{userTargetLevel}</Badge>
               </div>
-              <Progress value={expPercentage} className="h-1.5 w-48 bg-slate-800" />
-            </div>
-
-            {/* 目标段位显示 */}
-            <div className="flex items-center gap-3 bg-slate-900/50 border border-slate-800 px-4 py-2 rounded-xl">
-              <Trophy className="h-4 w-4 text-yellow-500" />
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-                {userTargetLevel || '未定段位'}
-              </span>
+              <div className="flex items-center gap-3 text-sm text-slate-400">
+                <span className="flex items-center gap-1"><Zap className="w-3 h-3 text-yellow-400" /> {totalExp} XP</span>
+                <span className="flex items-center gap-1"><Target className="w-3 h-3 text-blue-400" /> 下一级: {1000 - (totalExp % 1000)} XP</span>
+              </div>
             </div>
           </div>
-        </div>
-      </header>
-
-      {/* 3. 入站后的主界面布局 (Dashboard) */}
-      <main className="flex-1 p-6">
-        <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-6 lg:grid-cols-12 h-full">
           
-          {/* 左侧区域 (占据 60% 宽度 / col-span-7) */}
-          <div className="lg:col-span-7 flex flex-col gap-4">
-            <Tabs defaultValue="roadmap" className="w-full h-full flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <TabsList className="bg-slate-900 border border-slate-800 p-1">
-                  <TabsTrigger value="roadmap" className="data-[state=active]:bg-purple-600">
-                    <Map className="mr-2 h-4 w-4" /> 
-                    当前跃迁路线
+          <div className="flex-1 max-w-md">
+            <div className="flex justify-between text-xs mb-1 px-1 text-slate-500">
+              <span>等级进度</span>
+              <span>{(totalExp % 1000) / 10}%</span>
+            </div>
+            <Progress value={(totalExp % 1000) / 10} className="h-2 bg-slate-800" />
+          </div>
+        </header>
+
+        {/* --- 双维控制台布局 (PRD 3.2) --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* 左侧核心区 (7/12 宽度) - 宏观视图 */}
+          <div className="lg:col-span-7 space-y-6">
+            <Tabs defaultValue="roadmap" className="w-full">
+              <div className="flex items-center justify-between mb-4 bg-slate-900/50 p-1 rounded-xl border border-slate-800 w-fit">
+                <TabsList className="bg-transparent border-0">
+                  <TabsTrigger 
+                    value="roadmap" 
+                    className="data-[state=active]:bg-purple-600 data-[state=active]:text-white px-6 transition-all"
+                  >
+                    动态路线图
                   </TabsTrigger>
-                  <TabsTrigger value="star-chart" className="data-[state=active]:bg-blue-600">
-                    <Star className="mr-2 h-4 w-4" /> 
-                    全息星盘大盘
+                  <TabsTrigger 
+                    value="star-chart"
+                    className="data-[state=active]:bg-blue-600 data-[state=active]:text-white px-6 transition-all"
+                  >
+                    全息星盘
                   </TabsTrigger>
                 </TabsList>
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <LayoutDashboard className="h-3 w-3" />
-                  可视化视图
-                </div>
               </div>
 
-              <div className="flex-1 bg-slate-900/30 border border-slate-800/50 rounded-2xl overflow-hidden backdrop-blur-sm">
-                <TabsContent value="roadmap" className="h-full m-0 p-0">
-                  <LearningPathFlow currentGoal={userTargetLevel || ''} />
+              <Card className="bg-slate-900/40 border-slate-800 backdrop-blur-sm overflow-hidden h-[700px] relative">
+                <TabsContent value="roadmap" className="m-0 h-full">
+                  <LearningPathFlow />
                 </TabsContent>
-                <TabsContent value="star-chart" className="h-full m-0 p-0">
-                  <StarConstellationSkillTree 
-                    skillPoints={totalExp} 
-                    onSkillPointsChange={(points) => {}} // 逻辑已在 store 中处理
-                    onSkillsDataChange={() => {}}
-                  />
+                <TabsContent value="star-chart" className="m-0 h-full">
+                  < StarConstellationSkillTree  />
                 </TabsContent>
-              </div>
+              </Card>
             </Tabs>
           </div>
 
-          {/* 右侧区域 (占据 40% 宽度 / col-span-5) */}
+          {/* 右侧执行区 (5/12 宽度) - 微观执行 */}
           <div className="lg:col-span-5 flex flex-col gap-6">
             {/* 任务中心 */}
-            <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="p-4 border-b border-slate-800 bg-slate-900/80 flex items-center gap-2">
-                <Target className="h-4 w-4 text-green-500" />
-                <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400">任务中心</h2>
+            <section className="flex-1 min-h-0">
+              <div className="flex items-center gap-2 mb-3 px-2">
+                <MousePointer2 className="w-4 h-4 text-purple-400" />
+                <h2 className="text-lg font-semibold text-slate-200 uppercase tracking-widest">任务中心</h2>
               </div>
-              <div className="h-[400px] overflow-y-auto">
-                <EnhancedTaskCenter 
-                  selectedSkill={null} 
-                  allSkills={[]} // 建议后续从 store 获取
-                  onTaskComplete={(taskId, rewards) => addExp(rewards.xp)} 
-                />
+              <div className="h-[400px] overflow-hidden">
+                <EnhancedTaskCenter />
               </div>
-            </div>
+            </section>
 
-            {/* 项目中心 */}
-            <div className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="p-4 border-b border-slate-800 bg-slate-900/80 flex items-center gap-2">
-                <Zap className="h-4 w-4 text-blue-500" />
-                <h2 className="text-sm font-bold uppercase tracking-widest text-slate-400">深度项目实战</h2>
+            {/* 项目系统 */}
+            <section className="flex-1 min-h-0">
+              <div className="flex items-center gap-2 mb-3 px-2">
+                <Trophy className="w-4 h-4 text-yellow-500" />
+                <h2 className="text-lg font-semibold text-slate-200 uppercase tracking-widest">项目实战系统</h2>
               </div>
-              <div className="h-[400px] overflow-y-auto">
-                <CustomProjectSystem 
-                  selectedSkill={null} 
-                  allSkills={[]} 
-                  onProjectComplete={(title, category, score, diff, xp) => addExp(xp)} 
-                />
+              <div className="h-[274px] overflow-hidden">
+                <CustomProjectSystem />
               </div>
-            </div>
+            </section>
           </div>
 
         </div>
-      </main>
-
-      {/* 背景装饰（增强科技感） */}
-      <div className="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_50%_50%,rgba(139,92,246,0.05),transparent_50%)] pointer-events-none" />
+      </div>
     </div>
   );
 }
-
-export default App;
