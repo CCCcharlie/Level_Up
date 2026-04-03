@@ -56,8 +56,10 @@ interface GameState {
 
   // --- Actions ---
   addExp: (amount: number) => void;
+  setSkillPoints: (skillPoints: number) => void;
   setTargetLevel: (direction: string, level: TargetLevel) => void;
   setActiveRoadmapNode: (nodeId: string) => void;
+  completeGapNode: (nodeId: string) => void;
   equipItem: (id: string, slot: Equipment['equippedSlot']) => void;
   unequipItem: (id: string) => void;
   resetOnboarding: () => void;
@@ -94,6 +96,9 @@ equipment: [
       level: newLevel
     });
   },
+
+  // 技能点更新
+  setSkillPoints: (skillPoints) => set({ skillPoints }),
 
   // 核心重构：双重定锚方法 (PRD 3.1)
   setTargetLevel: (direction, level) => {
@@ -148,6 +153,12 @@ equipment: [
 
   // 切换激活节点
   setActiveRoadmapNode: (nodeId) => set({ activeRoadmapNodeId: nodeId }),
+
+  // 缺口节点完成后，从待办列表中移除
+  completeGapNode: (nodeId) =>
+    set((state) => ({
+      gapNodes: state.gapNodes.filter((gapNodeId) => gapNodeId !== nodeId),
+    })),
 
   // 装备逻辑
   equipItem: (itemId) => {
