@@ -3,8 +3,7 @@
 import useGameStore from '../../store/useGameStore';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { Target } from 'lucide-react';
-
+import { Target, Zap } from 'lucide-react';
 interface EnhancedTaskCenterProps {
   selectedSkill?: any;
   allSkills?: any[];
@@ -36,13 +35,12 @@ export default function EnhancedTaskCenter({
       {/* PRD 要求的 Header */}
       <div className="border-b border-slate-700 pb-4">
         <div className="flex items-center gap-3 mb-2">
-          <Badge variant="secondary" className="bg-orange-900/30 text-orange-400 border-orange-400/50">
+          <Badge variant="outline" className="border-amber-500/50 text-amber-500 bg-amber-500/5">
             当前攻克节点
           </Badge>
           <h2 className="text-2xl font-bold text-slate-100">{activeNode.title}</h2>
         </div>
-        <p className="text-sm text-red-400 flex items-center gap-2">
-          <span className="font-medium">直击痛点：</span>
+        <p className="text-[13px] text-amber-400/90 flex items-start gap-2 leading-relaxed">          <span className="font-medium">直击痛点：</span>
           {activeNode.focus}
         </p>
       </div>
@@ -55,23 +53,20 @@ export default function EnhancedTaskCenter({
 
         <div className="grid gap-3">
           {activeNode.tasks.map((task, index) => (
-            <Card key={index} className="p-4 border-slate-700 hover:border-slate-500 transition-colors flex items-start gap-4">
-              <div className="w-6 h-6 rounded bg-slate-800 flex items-center justify-center text-xs font-mono text-slate-400 mt-0.5">
-                {index + 1}
+        <Card key={index} className="group p-3 border-slate-800 bg-slate-950/40 hover:border-amber-500/30 transition-all duration-300">
+          <div className="flex items-start gap-3">
+            <div className="w-5 h-5 rounded-sm bg-slate-900 border border-slate-800 flex items-center justify-center text-[10px] font-mono text-slate-500 group-hover:text-amber-400 transition-colors">
+              {String(index + 1).padStart(2, '0')}
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">{task}</p>
+              <div className="flex items-center gap-1.5 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                <Zap className="w-2.5 h-2.5 text-amber-500" />
+                <span className="text-[10px] text-slate-500 font-mono">+15 XP REWARD</span>
               </div>
-              <div className="flex-1">
-                <p className="text-slate-200">{task}</p>
-                <p className="text-xs text-slate-500 mt-1">完成可获得经验值 +15 XP</p>
-              </div>
-              {onTaskComplete && (
-                <button
-                  onClick={() => onTaskComplete(`node-task-${index}`, { xp: 15, skillPoints: 3 })}
-                  className="px-4 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-medium rounded-md transition-colors"
-                >
-                  完成
-                </button>
-              )}
-            </Card>
+            </div>
+          </div>
+        </Card>
           ))}
         </div>
       </div>

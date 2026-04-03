@@ -63,7 +63,9 @@ const LearningPathFlow = () => {
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
             transition={{ delay: index * 0.1 }}
-            className="relative"
+            className="relative cursor-pointer group"
+            onClick={() => setActiveRoadmapNode(node.id)} // 点击切换当前节点   
+
           >
             {/* 地铁站式节点圆标 */}
             <div className={`absolute -left-[35px] top-1 w-6 h-6 rounded-full z-20 border-4 border-slate-950 flex items-center justify-center ${

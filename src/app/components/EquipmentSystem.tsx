@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Progress } from './ui/progress';
+import useGameStore from '../../store/useGameStore'; //
 import {
   Sword,
   Shield,
@@ -47,13 +48,15 @@ export interface Equipment {
   equippedSlot: 'weapon' | 'helmet' | 'chest' | 'accessory1' | 'accessory2' | null;
 }
 
-interface EquipmentSystemProps {
+export interface EquipmentSystemProps {
   equipment: Equipment[];
-  onEquip: (equipmentId: string, slot: Equipment['equippedSlot']) => void;
-  onUnequip: (equipmentId: string) => void;
+  onEquip: (id: string, slot: Equipment['equippedSlot']) => void;
+  onUnequip: (id: string) => void;
 }
 
-export function EquipmentSystem({ equipment, onEquip, onUnequip }: EquipmentSystemProps) {
+export default function EquipmentSystem() {
+  const { equipment, equipItem, unequipItem } = useGameStore();
+
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment | null>(null);
   const [filterRarity, setFilterRarity] = useState<'all' | Equipment['rarity']>('all');
 
@@ -146,15 +149,15 @@ export function EquipmentSystem({ equipment, onEquip, onUnequip }: EquipmentSyst
     // Check if slot is already occupied
     const occupiedItem = equippedItems.find(e => e.equippedSlot === slot);
     if (occupiedItem) {
-      onUnequip(occupiedItem.id);
+      unequipItem(occupiedItem.id);
     }
 
-    onEquip(item.id, slot);
+    equipItem(item.id, slot);
     toast.success(`装备 ${item.name} 到 ${getSlotText(slot)}`, { icon: '⚔️' });
   };
 
   const handleUnequip = (item: Equipment) => {
-    onUnequip(item.id);
+    unequipItem(item.id);
     toast.success(`卸下 ${item.name}`, { icon: '📦' });
   };
 
