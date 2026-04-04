@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, Terminal, Code2, Database, Layout, Loader2 } from 'lucide-react';
+import { Sparkles, Terminal, Code2, Database, Layout, Loader2, Chrome } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { useGameStore, TargetLevel } from '../../store/useGameStore'; // 引入重构后的 Store
+import { signInWithGoogle } from '../../lib/supabase';
 
 // 职业方向配置 (PRD Step 1)
 const CAREER_DIRECTIONS = [
@@ -24,6 +25,7 @@ export function CareerOnboarding() {
   const [direction, setDirection] = useState<string | null>(null);
   const [level, setLevel] = useState<TargetLevel | null>(null);
   const [isAwakening, setIsAwakening] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const { setTargetLevel } = useGameStore();
 
@@ -38,6 +40,17 @@ export function CareerOnboarding() {
         // Store 内部会自动设置 isOnboarded: true
       }
     }, 1500);
+  };
+
+  // 处理 Google 登录
+  const handleGoogleSignIn = async () => {
+    setIsSigningIn(true);
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Sign in failed:', error);
+      setIsSigningIn(false);
+    }
   };
 
   return (
@@ -58,6 +71,40 @@ export function CareerOnboarding() {
             <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8 tracking-wider">
               第一步：定锚你的职业维度
             </h2>
+
+            {/* Google OAuth 登录按钮 */}
+            <div className="mb-12 flex flex-col items-center">
+              <p className="text-slate-400 text-sm mb-4">首先，请使用 Google 账户登录</p>
+              <motion.button
+                onClick={handleGoogleSignIn}
+                disabled={isSigningIn}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="group relative px-8 py-3 rounded-xl font-semibold text-white overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {/* 背景渐变 */}
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                {/* 边框微光效果 */}
+                <div className="absolute inset-0 rounded-xl border border-blue-400/0 group-hover:border-blue-300/60 transition-colors duration-300 shadow-[0_0_20px_rgba(59,130,246,0)_inset,0_0_20px_rgba(59,130,246,0)] group-hover:shadow-[0_0_20px_rgba(59,130,246,0.3)_inset,0_0_20px_rgba(59,130,246,0.2)]" />
+
+                {/* 内容 */}
+                <div className="relative z-10 flex items-center justify-center gap-3">
+                  {isSigningIn ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>连接中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Chrome className="w-5 h-5" />
+                      <span>使用 Google 登录</span>
+                    </>
+                  )}
+                </div>
+              </motion.button>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {CAREER_DIRECTIONS.map((item) => (
                 <Card 
