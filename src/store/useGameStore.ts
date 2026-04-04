@@ -6,6 +6,17 @@ import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
 
 export type TargetLevel = 'Junior' | 'Mid' | 'Senior';
 
+export type TaskType = 'concept' | 'leetcode' | 'project' | 'feynman' | 'reinforcement';
+
+export interface Task {
+  id: string;
+  title: string;
+  type: TaskType;
+  referenceId?: string;
+  subTasks?: Task[];
+  estimatedXP?: number;
+}
+
 /**
  * 路线图节点接口 (PRD 3.2)
  */
@@ -15,7 +26,9 @@ export interface RoadmapNode {
   focus: string;       // 对应之前的 description
   status: 'locked' | 'current' | 'completed';
   requiredXP: number;
-  tasks: string[];     // 节点关联的任务列表
+  reinforcementLevel: number;
+  isReinforcing: boolean;
+  tasks: Task[];     // 节点关联的任务列表
 }
 
 /**
@@ -55,22 +68,59 @@ export interface SkillProgressEntry {
 
 const queryClient = supabase as any;
 
+const TASK_TYPES: TaskType[] = ['concept', 'leetcode', 'project', 'feynman', 'reinforcement'];
+
+const isTaskType = (value: unknown): value is TaskType =>
+  typeof value === 'string' && TASK_TYPES.includes(value as TaskType);
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-const isRoadmapNode = (value: unknown): value is RoadmapNode => {
-  if (!isRecord(value)) return false;
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
-  const status = value.status;
-  return (
-    typeof value.id === 'string' &&
-    typeof value.title === 'string' &&
-    typeof value.focus === 'string' &&
-    (status === 'locked' || status === 'current' || status === 'completed') &&
-    typeof value.requiredXP === 'number' &&
-    Array.isArray(value.tasks) &&
-    value.tasks.every((task) => typeof task === 'string')
-  );
+const createTaskId = (scopeId: string, title: string, index: number) =>
+  `${scopeId}-${slugify(title) || 'task'}-${index}`;
+
+const createTask = (
+  scopeId: string,
+  title: string,
+  type: TaskType,
+  index: number,
+  options: Partial<Omit<Task, 'id' | 'title' | 'type'>> = {}
+): Task => ({
+  id: createTaskId(scopeId, title, index),
+  title,
+  type,
+  ...options,
+});
+
+const normalizeTask = (value: unknown, scopeId: string, index: number): Task | null => {
+  if (typeof value === 'string') {
+    return createTask(scopeId, value, 'concept', index, { estimatedXP: 10 });
+  }
+
+  if (!isRecord(value) || typeof value.title !== 'string') {
+    return null;
+  }
+
+  const normalizedSubTasks = Array.isArray(value.subTasks)
+    ? value.subTasks
+        .map((subTask, subIndex) => normalizeTask(subTask, `${scopeId}-${index}`, subIndex))
+        .filter((subTask): subTask is Task => Boolean(subTask))
+    : undefined;
+
+  return {
+    id: typeof value.id === 'string' ? value.id : createTaskId(scopeId, value.title, index),
+    title: value.title,
+    type: isTaskType(value.type) ? value.type : 'concept',
+    referenceId: typeof value.referenceId === 'string' ? value.referenceId : undefined,
+    subTasks: normalizedSubTasks && normalizedSubTasks.length > 0 ? normalizedSubTasks : undefined,
+    estimatedXP: typeof value.estimatedXP === 'number' ? value.estimatedXP : undefined,
+  };
 };
 
 const normalizeRoadmapNodes = (value: unknown): RoadmapNode[] => {
@@ -78,7 +128,129 @@ const normalizeRoadmapNodes = (value: unknown): RoadmapNode[] => {
     return [];
   }
 
-  return value.filter(isRoadmapNode);
+  return value
+    .map((item, index): RoadmapNode | null => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const status = item.status;
+      const normalizedTasks = Array.isArray(item.tasks)
+        ? item.tasks
+            .map((task, taskIndex) => normalizeTask(task, typeof item.id === 'string' ? item.id : `roadmap-${index}`, taskIndex))
+            .filter((task): task is Task => Boolean(task))
+        : [];
+
+      if (
+        typeof item.id !== 'string' ||
+        typeof item.title !== 'string' ||
+        typeof item.focus !== 'string' ||
+        !(status === 'locked' || status === 'current' || status === 'completed') ||
+        typeof item.requiredXP !== 'number'
+      ) {
+        return null;
+      }
+
+      return {
+        id: item.id,
+        title: item.title,
+        focus: item.focus,
+        status,
+        requiredXP: item.requiredXP,
+        reinforcementLevel: typeof item.reinforcementLevel === 'number' ? item.reinforcementLevel : 0,
+        isReinforcing: typeof item.isReinforcing === 'boolean' ? item.isReinforcing : false,
+        tasks: normalizedTasks,
+      };
+    })
+    .filter((node): node is RoadmapNode => Boolean(node));
+};
+
+const serializeRoadmapNodes = (nodes: RoadmapNode[]) =>
+  nodes.map((node) => ({
+    ...node,
+    tasks: node.tasks.map((task) => ({ ...task })),
+  }));
+
+const buildReinforcementTasks = (node: RoadmapNode): Task[] => {
+  const prompts = [
+    `围绕「${node.focus}」的核心概念是什么？`,
+    `如果要用自己的话解释「${node.focus}」，你会怎么回答？`,
+    `针对「${node.focus}」，你还能补充哪些关键边界条件？`,
+  ];
+
+  return prompts.map((prompt, index) =>
+    createTask(node.id, prompt, 'reinforcement', node.reinforcementLevel + index + 1, {
+      referenceId: node.id,
+      estimatedXP: 10,
+    })
+  );
+};
+
+const buildBreakdownTasks = (task: Task, nodeId: string): Task[] => {
+  const baseXp = task.estimatedXP ?? 30;
+  const perTaskXp = Math.max(5, Math.floor(baseXp / 3));
+
+  return [
+    createTask(nodeId, '阅读文档', 'concept', 1, {
+      referenceId: task.id,
+      estimatedXP: perTaskXp,
+    }),
+    createTask(nodeId, '代码实践', 'project', 2, {
+      referenceId: task.id,
+      estimatedXP: perTaskXp,
+    }),
+    createTask(nodeId, '核心回答', 'feynman', 3, {
+      referenceId: task.id,
+      estimatedXP: perTaskXp,
+    }),
+  ];
+};
+
+const syncRoadmapToSupabase = async (userId: string, roadmap: RoadmapNode[]) => {
+  const now = new Date().toISOString();
+
+  try {
+    const { data: roadmapRow, error: fetchError } = await queryClient
+      .from('roadmaps')
+      .select('id')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchError) {
+      throw fetchError;
+    }
+
+    if (roadmapRow?.id) {
+      const { error: updateError } = await queryClient
+        .from('roadmaps')
+        .update({
+          roadmap_data: serializeRoadmapNodes(roadmap),
+          updated_at: now,
+        })
+        .eq('id', roadmapRow.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      return;
+    }
+
+    const { error: insertError } = await queryClient.from('roadmaps').insert({
+      user_id: userId,
+      roadmap_data: serializeRoadmapNodes(roadmap),
+      created_at: now,
+      updated_at: now,
+    });
+
+    if (insertError) {
+      throw insertError;
+    }
+  } catch (error) {
+    console.error('[useGameStore:syncRoadmap] Failed to sync roadmap:', error);
+  }
 };
 
 const normalizeSkillProgress = (rows: ProgressRow[]): Record<string, SkillProgressEntry> =>
@@ -135,6 +307,8 @@ interface GameState {
   setActiveRoadmapNode: (nodeId: string) => void;
   completeGapNode: (nodeId: string) => void;
   trackProgress: (skillId: string, xpGained: number, isfinished?: boolean) => Promise<void>;
+  reinforceNode: (nodeId: string) => Promise<void>;
+  breakdownTask: (taskId: string) => Promise<void>;
   equipItem: (id: string, slot: Equipment['equippedSlot']) => void;
   unequipItem: (id: string) => void;
   resetOnboarding: () => void;
@@ -310,15 +484,33 @@ export const useGameStore = create<GameState>((set, get) => ({
       mockRoadmap = [
         { 
           id: 'j1', title: '核心基础构建', focus: '掌握语言底层原理与核心语法', status: 'current', requiredXP: 500,
-          tasks: ['阅读核心语法文档', '手写实现基础算法', '完成 5 道基础练习题'] 
+          reinforcementLevel: 0,
+          isReinforcing: false,
+          tasks: [
+            createTask('j1', '阅读核心语法文档', 'concept', 1, { estimatedXP: 15 }),
+            createTask('j1', '手写实现基础算法', 'leetcode', 2, { referenceId: 'leetcode-001', estimatedXP: 20 }),
+            createTask('j1', '完成 5 道基础练习题', 'project', 3, { estimatedXP: 25 }),
+          ]
         },
         { 
           id: 'j2', title: '版本控制专家', focus: 'Git 协同开发与分流策略', status: 'locked', requiredXP: 800,
-          tasks: ['执行一次 Rebase', '解决合并冲突', '配置 Git Hooks']
+          reinforcementLevel: 0,
+          isReinforcing: false,
+          tasks: [
+            createTask('j2', '执行一次 Rebase', 'concept', 1, { estimatedXP: 15 }),
+            createTask('j2', '解决合并冲突', 'project', 2, { estimatedXP: 20 }),
+            createTask('j2', '配置 Git Hooks', 'concept', 3, { estimatedXP: 15 }),
+          ]
         },
         { 
           id: 'j3', title: '初级实战工程', focus: '独立完成模块化组件开发', status: 'locked', requiredXP: 1200,
-          tasks: ['封装 Button 组件', '实现 Todo List', '学习 CSS Modules']
+          reinforcementLevel: 0,
+          isReinforcing: false,
+          tasks: [
+            createTask('j3', '封装 Button 组件', 'project', 1, { estimatedXP: 20 }),
+            createTask('j3', '实现 Todo List', 'project', 2, { estimatedXP: 25 }),
+            createTask('j3', '学习 CSS Modules', 'concept', 3, { estimatedXP: 15 }),
+          ]
         },
       ];
       mockGapNodes = ['base_syntax', 'git_flow', 'component_logic'];
@@ -326,17 +518,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       mockRoadmap = [
         { 
           id: 'm1', title: '架构模式实践', focus: '深入理解 MVC/MVVM 与设计模式', status: 'current', requiredXP: 2000,
-          tasks: ['重构旧模块逻辑', '接入状态管理', '设计组件通信方案']
+          reinforcementLevel: 0,
+          isReinforcing: false,
+          tasks: [
+            createTask('m1', '重构旧模块逻辑', 'project', 1, { estimatedXP: 30 }),
+            createTask('m1', '接入状态管理', 'concept', 2, { estimatedXP: 20 }),
+            createTask('m1', '设计组件通信方案', 'feynman', 3, { estimatedXP: 20 }),
+          ]
         },
-        { id: 'm2', title: '性能优化专项', focus: '全链路性能瓶颈分析与调优', status: 'locked', requiredXP: 2500, tasks: [] },
-        { id: 'm3', title: '工程化体系建设', focus: 'CI/CD 流水线与自动化测试', status: 'locked', requiredXP: 3000, tasks: [] },
+        { id: 'm2', title: '性能优化专项', focus: '全链路性能瓶颈分析与调优', status: 'locked', requiredXP: 2500, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
+        { id: 'm3', title: '工程化体系建设', focus: 'CI/CD 流水线与自动化测试', status: 'locked', requiredXP: 3000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
       ];
       mockGapNodes = ['design_patterns', 'perf_optimization', 'ci_cd'];
     } else {
       mockRoadmap = [
-        { id: 's1', title: '系统架构演进', focus: '从单体到微服务的分布式决策', status: 'current', requiredXP: 5000, tasks: [] },
-        { id: 's2', title: '技术选型方法论', focus: '复杂业务场景下的技术栈评估', status: 'locked', requiredXP: 6000, tasks: [] },
-        { id: 's3', title: '团队技术领导力', focus: '技术架构委员会与标准制定', status: 'locked', requiredXP: 8000, tasks: [] },
+        { id: 's1', title: '系统架构演进', focus: '从单体到微服务的分布式决策', status: 'current', requiredXP: 5000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
+        { id: 's2', title: '技术选型方法论', focus: '复杂业务场景下的技术栈评估', status: 'locked', requiredXP: 6000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
+        { id: 's3', title: '团队技术领导力', focus: '技术架构委员会与标准制定', status: 'locked', requiredXP: 8000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
       ];
       mockGapNodes = ['dist_systems', 'tech_strategy', 'leadership'];
     }
@@ -359,6 +557,119 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((state) => ({
       gapNodes: state.gapNodes.filter((gapNodeId) => gapNodeId !== nodeId),
     })),
+
+  reinforceNode: async (nodeId) => {
+    const currentRoadmap = get().dynamicRoadmap;
+    const nodeIndex = currentRoadmap.findIndex((node) => node.id === nodeId);
+
+    if (nodeIndex < 0) {
+      return;
+    }
+
+    const sourceNode = currentRoadmap[nodeIndex];
+    const nextReinforcementLevel = sourceNode.reinforcementLevel + 1;
+
+    set((state) => ({
+      dynamicRoadmap: state.dynamicRoadmap.map((node) =>
+        node.id === nodeId
+          ? {
+              ...node,
+              reinforcementLevel: nextReinforcementLevel,
+              isReinforcing: true,
+            }
+          : node
+      ),
+    }));
+
+    try {
+      const reinforcementTasks = buildReinforcementTasks({
+        ...sourceNode,
+        reinforcementLevel: nextReinforcementLevel,
+        isReinforcing: true,
+      });
+
+      const nextRoadmap = currentRoadmap.map((node) =>
+        node.id === nodeId
+          ? {
+              ...node,
+              reinforcementLevel: nextReinforcementLevel,
+              isReinforcing: false,
+              tasks: [...node.tasks, ...reinforcementTasks],
+            }
+          : node
+      );
+
+      set({ dynamicRoadmap: nextRoadmap });
+
+      const currentUser = get().currentUser;
+
+      if (currentUser) {
+        await syncRoadmapToSupabase(currentUser.id, nextRoadmap);
+      }
+    } catch (error) {
+      set((state) => ({
+        dynamicRoadmap: state.dynamicRoadmap.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                isReinforcing: false,
+              }
+            : node
+        ),
+      }));
+      console.error('[useGameStore:reinforceNode] Failed to reinforce node:', error);
+    }
+  },
+
+  breakdownTask: async (taskId) => {
+    const currentRoadmap = get().dynamicRoadmap;
+    let changed = false;
+
+    const nextRoadmap = currentRoadmap.map((node) => {
+      const taskIndex = node.tasks.findIndex((task) => task.id === taskId);
+
+      if (taskIndex < 0) {
+        return node;
+      }
+
+      const targetTask = node.tasks[taskIndex];
+
+      if (targetTask.subTasks && targetTask.subTasks.length > 0) {
+        return node;
+      }
+
+      changed = true;
+      const subTasks = buildBreakdownTasks(targetTask, node.id);
+      const totalAllocatedXp = subTasks.reduce((sum, subTask) => sum + (subTask.estimatedXP ?? 0), 0);
+
+      return {
+        ...node,
+        tasks: node.tasks.map((task) =>
+          task.id === taskId
+            ? {
+                ...task,
+                subTasks,
+                estimatedXP: totalAllocatedXp,
+              }
+            : task
+        ),
+      };
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    set({ dynamicRoadmap: nextRoadmap });
+
+    const currentUser = get().currentUser;
+
+    if (!currentUser) {
+      return;
+    }
+
+    await syncRoadmapToSupabase(currentUser.id, nextRoadmap);
+  },
 
   trackProgress: async (skillId, xpGained, isfinished) => {
     const currentState = get();

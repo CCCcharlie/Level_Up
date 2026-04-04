@@ -1,6 +1,6 @@
 'use client';
 
-import useGameStore from '../../store/useGameStore';
+import useGameStore, { type Task } from '../../store/useGameStore';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Target, Zap } from 'lucide-react';
@@ -18,6 +18,8 @@ export default function EnhancedTaskCenter({
   const { dynamicRoadmap, activeRoadmapNodeId } = useGameStore();
 
   const activeNode = dynamicRoadmap.find((node) => node.id === activeRoadmapNodeId);
+
+  const renderTaskLabel = (task: Task) => task.title;
 
   if (!activeNode) {
     return (
@@ -59,7 +61,17 @@ export default function EnhancedTaskCenter({
               {String(index + 1).padStart(2, '0')}
             </div>
             <div className="flex-1">
-              <p className="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">{task}</p>
+              <p className="text-xs text-slate-300 group-hover:text-slate-100 transition-colors">{renderTaskLabel(task)}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Badge variant="outline" className="border-slate-700 text-[10px] text-slate-300">
+                  {task.type}
+                </Badge>
+                {task.subTasks?.length ? (
+                  <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-300">
+                    {task.subTasks.length} sub tasks
+                  </Badge>
+                ) : null}
+              </div>
               <div className="flex items-center gap-1.5 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
                 <Zap className="w-2.5 h-2.5 text-amber-500" />
                 <span className="text-[10px] text-slate-500 font-mono">+15 XP REWARD</span>

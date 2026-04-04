@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useGameStore } from '../../store/useGameStore';
+import { type Task, useGameStore } from '../../store/useGameStore';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -39,6 +39,8 @@ const getNodeTone = (nodeStatus: string, isActiveNode: boolean) => {
     badge: 'bg-slate-500/10 text-slate-200 border-slate-500/30',
   };
 };
+
+const getTaskLabel = (task: Task) => task.title;
 
 const LearningPathFlow = () => {
   const {
@@ -300,7 +302,7 @@ const LearningPathFlow = () => {
                         key={`${node.id}-task-${taskIndex}`}
                         className="rounded-full border border-slate-700/70 bg-slate-950/50 px-3 py-1 text-[11px] text-slate-300"
                       >
-                        {task}
+                        {getTaskLabel(task)}
                       </span>
                     ))}
                   </div>
