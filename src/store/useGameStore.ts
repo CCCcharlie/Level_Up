@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { supabase } from '../lib/supabase';
+import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
 
 // --- 类型定义 ---
 
@@ -35,16 +37,87 @@ export interface Equipment {
   equippedSlot: 'weapon' | 'helmet' | 'chest' | 'accessory1' | 'accessory2' | null;
 }
 
+export interface CurrentUser {
+  id: string;
+  email: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  userLevel: number;
+  totalExp: number;
+  careerDirection: string | null;
+}
+
+export interface SkillProgressEntry {
+  currentXp: number;
+  isFinished: boolean;
+  lastActive: string | null;
+}
+
+const queryClient = supabase as any;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isRoadmapNode = (value: unknown): value is RoadmapNode => {
+  if (!isRecord(value)) return false;
+
+  const status = value.status;
+  return (
+    typeof value.id === 'string' &&
+    typeof value.title === 'string' &&
+    typeof value.focus === 'string' &&
+    (status === 'locked' || status === 'current' || status === 'completed') &&
+    typeof value.requiredXP === 'number' &&
+    Array.isArray(value.tasks) &&
+    value.tasks.every((task) => typeof task === 'string')
+  );
+};
+
+const normalizeRoadmapNodes = (value: unknown): RoadmapNode[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter(isRoadmapNode);
+};
+
+const normalizeSkillProgress = (rows: ProgressRow[]): Record<string, SkillProgressEntry> =>
+  rows.reduce<Record<string, SkillProgressEntry>>((accumulator, row) => {
+    accumulator[row.skill_id] = {
+      currentXp: row.current_xp,
+      isFinished: row.is_finished,
+      lastActive: row.last_active,
+    };
+
+    return accumulator;
+  }, {});
+
+const mapUserRowToCurrentUser = (
+  userRow: UserRow,
+  fallbackEmail: string
+): CurrentUser => ({
+  id: userRow.id,
+  email: userRow.email || fallbackEmail,
+  displayName: userRow.display_name,
+  avatarUrl: userRow.avatar_url,
+  userLevel: userRow.user_level,
+  totalExp: userRow.total_exp,
+  careerDirection: userRow.career_direction,
+});
+
 interface GameState {
   // 1. 职业定锚状态 (PRD 3.1)
   careerDirection: string | null;
   userTargetLevel: TargetLevel;
   isOnboarded: boolean;
+  currentUser: CurrentUser | null;
+  isSyncing: boolean;
 
   // 2. 核心进度与经验值 (PRD 3.3)
   totalExp: number;
   level: number;
   skillPoints: number;
+  skillProgress: Record<string, SkillProgressEntry>;
 
   // 3. AI 生成的动态数据 (PRD 3.2)
   gapNodes: string[];                // 星盘高亮节点 ID
@@ -56,10 +129,12 @@ interface GameState {
 
   // --- Actions ---
   addExp: (amount: number) => void;
+  fetchUserData: () => Promise<void>;
   setSkillPoints: (skillPoints: number) => void;
   setTargetLevel: (direction: string, level: TargetLevel) => void;
   setActiveRoadmapNode: (nodeId: string) => void;
   completeGapNode: (nodeId: string) => void;
+  trackProgress: (skillId: string, xpGained: number, isfinished?: boolean) => Promise<void>;
   equipItem: (id: string, slot: Equipment['equippedSlot']) => void;
   unequipItem: (id: string) => void;
   resetOnboarding: () => void;
@@ -72,13 +147,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   careerDirection: null,
   userTargetLevel: 'Junior',
   isOnboarded: false,
+  currentUser: null,
+  isSyncing: false,
   totalExp: 3250,
   level: 8,
   skillPoints: 15,
+  skillProgress: {},
   gapNodes: [],
   dynamicRoadmap: [],
   activeRoadmapNodeId: null,
-equipment: [
+  equipment: [
     {
       id: 'e1', name: '神经连结头盔', type: 'armor', rarity: 'rare', category: '硬件',
       description: '提升代码逻辑处理速度', stats: { frontend: 15 },
@@ -89,12 +167,134 @@ equipment: [
 
   // 经验值累加逻辑
   addExp: (amount) => {
-    const newTotal = get().totalExp + amount;
+    const nextState = get();
+    const newTotal = nextState.totalExp + amount;
     const newLevel = Math.floor(newTotal / 1000) + 1;
-    set({ 
+    set({
       totalExp: newTotal,
-      level: newLevel
+      level: newLevel,
+      currentUser: nextState.currentUser
+        ? {
+            ...nextState.currentUser,
+            totalExp: newTotal,
+            userLevel: newLevel,
+          }
+        : null,
     });
+
+    void (async () => {
+      const currentUser = get().currentUser;
+
+      if (!currentUser) {
+        return;
+      }
+
+      try {
+        const { error } = await queryClient
+          .from('users')
+          .update({
+            total_exp: newTotal,
+            user_level: newLevel,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentUser.id);
+
+        if (error) {
+          throw error;
+        }
+      } catch (error) {
+        console.error('[useGameStore:addExp] Failed to sync user exp:', error);
+      }
+    })();
+  },
+
+  fetchUserData: async () => {
+    set({ isSyncing: true });
+
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await queryClient.auth.getSession();
+
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (!session?.user) {
+        set({
+          currentUser: null,
+          isSyncing: false,
+        });
+
+        return;
+      }
+
+      const userId = session.user.id;
+
+      const [userResult, progressResult, roadmapResult] = await Promise.all([
+        queryClient
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle(),
+        queryClient
+          .from('progress')
+          .select('*')
+          .eq('user_id', userId),
+        queryClient
+          .from('roadmaps')
+          .select('*')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false })
+          .limit(1),
+      ]);
+
+      const userRow: UserRow | null = userResult.data ?? null;
+      const progressRows: ProgressRow[] = progressResult.data ?? [];
+      const roadmapRow: RoadmapRow | null = roadmapResult.data?.[0] ?? null;
+
+      if (userResult.error) {
+        throw userResult.error;
+      }
+
+      if (progressResult.error) {
+        throw progressResult.error;
+      }
+
+      if (roadmapResult.error) {
+        throw roadmapResult.error;
+      }
+
+      const nextTotalExp = userRow?.total_exp ?? get().totalExp;
+      const nextLevel = userRow?.user_level ?? Math.floor(nextTotalExp / 1000) + 1;
+      const nextCareerDirection = userRow?.career_direction ?? get().careerDirection;
+      const nextCurrentUser = userRow
+        ? mapUserRowToCurrentUser(userRow, session.user.email ?? '')
+        : {
+            id: session.user.id,
+            email: session.user.email ?? '',
+            displayName: session.user.user_metadata?.display_name ?? null,
+            avatarUrl: session.user.user_metadata?.avatar_url ?? null,
+            userLevel: nextLevel,
+            totalExp: nextTotalExp,
+            careerDirection: nextCareerDirection,
+          };
+
+      set({
+        currentUser: nextCurrentUser,
+        totalExp: nextTotalExp,
+        level: nextLevel,
+        careerDirection: nextCareerDirection,
+        skillProgress: normalizeSkillProgress(progressRows),
+        gapNodes: progressRows.filter((row) => !row.is_finished).map((row) => row.skill_id),
+        dynamicRoadmap: roadmapRow ? normalizeRoadmapNodes(roadmapRow.roadmap_data) : [],
+      });
+    } catch (error) {
+      console.error('[useGameStore:fetchUserData] Failed to load user data:', error);
+    } finally {
+      set({ isSyncing: false });
+    }
   },
 
   // 技能点更新
@@ -160,6 +360,61 @@ equipment: [
       gapNodes: state.gapNodes.filter((gapNodeId) => gapNodeId !== nodeId),
     })),
 
+  trackProgress: async (skillId, xpGained, isfinished) => {
+    const currentState = get();
+    const currentProgress = currentState.skillProgress[skillId] ?? {
+      currentXp: 0,
+      isFinished: false,
+      lastActive: null,
+    };
+    const nextCurrentXp = currentProgress.currentXp + xpGained;
+    const nextIsFinished = Boolean(isfinished ?? currentProgress.isFinished);
+    const nextLastActive = new Date().toISOString();
+
+    set((state) => ({
+      skillProgress: {
+        ...state.skillProgress,
+        [skillId]: {
+          currentXp: nextCurrentXp,
+          isFinished: nextIsFinished,
+          lastActive: nextLastActive,
+        },
+      },
+      gapNodes: nextIsFinished
+        ? state.gapNodes.filter((gapNodeId) => gapNodeId !== skillId)
+        : state.gapNodes.includes(skillId)
+          ? state.gapNodes
+          : [...state.gapNodes, skillId],
+    }));
+
+    const currentUser = get().currentUser;
+
+    if (!currentUser) {
+      return;
+    }
+
+    try {
+      const { error } = await queryClient.from('progress').upsert(
+        {
+          user_id: currentUser.id,
+          skill_id: skillId,
+          current_xp: nextCurrentXp,
+          is_finished: nextIsFinished,
+          last_active: nextLastActive,
+        },
+        {
+          onConflict: 'user_id,skill_id',
+        }
+      );
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('[useGameStore:trackProgress] Failed to sync progress:', error);
+    }
+  },
+
   // 装备逻辑
   equipItem: (itemId) => {
     set((state) => ({
@@ -184,7 +439,9 @@ equipment: [
     careerDirection: null, 
     dynamicRoadmap: [], 
     gapNodes: [],
-    activeRoadmapNodeId: null 
+    activeRoadmapNodeId: null,
+    currentUser: null,
+    skillProgress: {},
   }),
 }));
 
