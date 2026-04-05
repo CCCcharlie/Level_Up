@@ -1,6 +1,9 @@
 const EDGE_FUNCTION_URL = (import.meta.env.VITE_AI_EDGE_FUNCTION_URL as string | undefined) ?? '';
+const GEMINI_API_KEY = (import.meta.env.VITE_GEMINI_API_KEY as string | undefined) ?? '';
+const GEMINI_MODEL = (import.meta.env.VITE_GEMINI_MODEL as string | undefined) ?? 'gemini-2.0-flash';
 const OPENAI_API_KEY = (import.meta.env.VITE_OPENAI_API_KEY as string | undefined) ?? '';
 const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string | undefined) ?? 'gpt-4o-mini';
+
 
 export const BREAKDOWN_PROMPT = [
   '你是一个学习路径重构引擎。',
@@ -132,6 +135,49 @@ const requestViaOpenAI = async (systemPrompt: string, userPrompt: string): Promi
   return extractJsonPayload(content);
 };
 
+const requestViaGemini = async (systemPrompt: string, userPrompt: string): Promise<unknown> => {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: { text: systemPrompt },
+        },
+        contents: [
+          {
+            parts: [{ text: userPrompt }],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: 'application/json',
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || `Gemini request failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as {
+    candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+  };
+
+  const content = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!content) {
+    throw new Error('Gemini response did not contain text content.');
+  }
+
+  return extractJsonPayload(content);
+};
+
 export const buildBreakdownPrompt = (taskTitle: string, nodeFocus: string, nodeTitle?: string) => ({
   systemPrompt: BREAKDOWN_PROMPT,
   userPrompt: [
@@ -163,11 +209,15 @@ export async function requestAI(systemPrompt: string, userPrompt: string): Promi
     return requestViaEdgeFunction(systemPrompt, userPrompt);
   }
 
+  if (GEMINI_API_KEY) {
+    return requestViaGemini(systemPrompt, userPrompt);
+  }
+
   if (OPENAI_API_KEY) {
     return requestViaOpenAI(systemPrompt, userPrompt);
   }
 
-  throw new Error('AI provider is not configured. Set VITE_AI_EDGE_FUNCTION_URL or VITE_OPENAI_API_KEY.');
+  throw new Error('AI provider is not configured. Set VITE_AI_EDGE_FUNCTION_URL, VITE_GEMINI_API_KEY, or VITE_OPENAI_API_KEY.');
 }
 
 export const normalizeTaskType = <T extends string>(value: unknown, allowedTypes: readonly T[], fallback: T): T =>
