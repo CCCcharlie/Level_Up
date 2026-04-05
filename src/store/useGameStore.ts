@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
-import { buildBreakdownPrompt, buildReinforcePrompt, normalizeTaskType, requestAI } from '../lib/aiService.ts';
+import { generateNodePrompt, normalizeTaskType, requestAI } from '../lib/aiService.ts';
 import { supabase } from '../lib/supabase';
 import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
 
@@ -180,6 +180,7 @@ const normalizeEstimatedXP = (value: unknown, fallback: number) =>
 
 const extractAIMappedTasks = (
   payload: unknown,
+  allowedTypes: readonly TaskType[],
   fallbackType: TaskType,
   scopeId: string,
   referenceId: string
@@ -209,7 +210,7 @@ const extractAIMappedTasks = (
       return createTask(
         scopeId,
         item.title,
-        normalizeTaskType(item.type, [fallbackType, ...BREAKDOWN_TASK_TYPES], fallbackType),
+        normalizeTaskType(item.type, allowedTypes, fallbackType),
         index + 1,
         {
           referenceId,
@@ -546,9 +547,36 @@ export const useGameStore = create<GameState>((set, get) => ({
       mockGapNodes = ['design_patterns', 'perf_optimization', 'ci_cd'];
     } else {
       mockRoadmap = [
-        { id: 's1', title: '系统架构演进', focus: '从单体到微服务的分布式决策', status: 'current', requiredXP: 5000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
-        { id: 's2', title: '技术选型方法论', focus: '复杂业务场景下的技术栈评估', status: 'locked', requiredXP: 6000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
-        { id: 's3', title: '团队技术领导力', focus: '技术架构委员会与标准制定', status: 'locked', requiredXP: 8000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
+        {
+          id: 's1', title: '系统架构演进', focus: '从单体到微服务的分布式决策', status: 'current', requiredXP: 5000,
+          reinforcementLevel: 0,
+          isReinforcing: false,
+          tasks: [
+            createTask('s1', '梳理服务拆分边界与数据一致性权衡', 'concept', 1, { estimatedXP: 30 }),
+            createTask('s1', '完成一次故障降级策略演练', 'project', 2, { estimatedXP: 35 }),
+            createTask('s1', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
+          ]
+        },
+        {
+          id: 's2', title: '技术选型方法论', focus: '复杂业务场景下的技术栈评估', status: 'locked', requiredXP: 6000,
+          reinforcementLevel: 0,
+          isReinforcing: false,
+          tasks: [
+            createTask('s2', '建立选型评估矩阵并对比三套方案', 'concept', 1, { estimatedXP: 30 }),
+            createTask('s2', '输出带成本估算的技术决策记录', 'project', 2, { estimatedXP: 35 }),
+            createTask('s2', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
+          ]
+        },
+        {
+          id: 's3', title: '团队技术领导力', focus: '技术架构委员会与标准制定', status: 'locked', requiredXP: 8000,
+          reinforcementLevel: 0,
+          isReinforcing: false,
+          tasks: [
+            createTask('s3', '制定跨团队代码评审标准与准入规范', 'concept', 1, { estimatedXP: 30 }),
+            createTask('s3', '组织一次架构评审并沉淀决策文档', 'project', 2, { estimatedXP: 35 }),
+            createTask('s3', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
+          ]
+        },
       ];
       mockGapNodes = ['dist_systems', 'tech_strategy', 'leadership'];
     }
@@ -602,9 +630,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         title: task.title,
         type: task.type,
       }));
-      const prompt = buildReinforcePrompt(sourceNode.title, sourceNode.focus, historyTasks);
+      const prompt = generateNodePrompt({
+        mode: 'reinforce',
+        nodeTitle: sourceNode.title,
+        nodeFocus: sourceNode.focus,
+        historyTasks,
+      });
       const aiResponse = await requestAI(prompt.systemPrompt, prompt.userPrompt);
-      const reinforcementTasks = extractAIMappedTasks(aiResponse, 'reinforcement', sourceNode.id, sourceNode.id);
+      const reinforcementTasks = extractAIMappedTasks(
+        aiResponse,
+        ['reinforcement'],
+        'reinforcement',
+        sourceNode.id,
+        sourceNode.id
+      );
 
       if (reinforcementTasks.length === 0) {
         throw new Error('AI did not return valid reinforcement tasks.');
@@ -665,9 +704,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     const loadingToastId = toast.loading('AI 正在重构你的学习路径...');
 
     try {
-      const prompt = buildBreakdownPrompt(targetTask.title, targetNode.focus, targetNode.title);
+      const prompt = generateNodePrompt({
+        mode: 'breakdown',
+        nodeTitle: targetNode.title,
+        nodeFocus: targetNode.focus,
+        taskTitle: targetTask.title,
+      });
       const aiResponse = await requestAI(prompt.systemPrompt, prompt.userPrompt);
-      const subTasks = extractAIMappedTasks(aiResponse, 'concept', targetNode.id, targetTask.id);
+      const subTasks = extractAIMappedTasks(
+        aiResponse,
+        BREAKDOWN_TASK_TYPES,
+        'concept',
+        targetNode.id,
+        targetTask.id
+      );
 
       if (subTasks.length === 0) {
         throw new Error('AI did not return valid breakdown tasks.');

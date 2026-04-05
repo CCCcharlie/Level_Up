@@ -1,233 +1,114 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader } from './ui/card';
+import type { Task } from '../../store/useGameStore';
+import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
-import { Progress } from './ui/progress';
 import { Badge } from './ui/badge';
-import { Checkbox } from './ui/checkbox';
-import { ChevronRight, CheckCircle2, Circle, Clock } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { CheckCircle2, Code2, Dumbbell, MessageSquare, Rocket, Sparkles } from 'lucide-react';
 
-interface Step {
-  id: string;
-  title: string;
-  description: string;
-  duration: string;
-  completed: boolean;
-  subtasks: {
-    id: string;
-    title: string;
-    completed: boolean;
-  }[];
+interface StepBreakdownProps {
+  tasks: Task[];
+  completedTaskIds: Record<string, boolean>;
+  onTaskComplete: (task: Task) => void;
 }
 
-export function StepBreakdown() {
-  const [steps, setSteps] = useState<Step[]>([
-    {
-      id: '1',
-      title: '基础HTML/CSS学习',
-      description: '掌握网页结构和样式的基础知识',
-      duration: '2周',
-      completed: true,
-      subtasks: [
-        { id: '1-1', title: '学习HTML标签和语义化', completed: true },
-        { id: '1-2', title: '掌握CSS选择器和布局', completed: true },
-        { id: '1-3', title: '响应式设计基础', completed: true },
-      ],
-    },
-    {
-      id: '2',
-      title: 'JavaScript核心概念',
-      description: '深入理解JavaScript语言特性',
-      duration: '3周',
-      completed: false,
-      subtasks: [
-        { id: '2-1', title: '变量、数据类型和运算符', completed: true },
-        { id: '2-2', title: '函数和作用域', completed: true },
-        { id: '2-3', title: '异步编程和Promise', completed: false },
-        { id: '2-4', title: 'ES6+新特性', completed: false },
-      ],
-    },
-    {
-      id: '3',
-      title: 'React框架入门',
-      description: '学习现代前端框架React',
-      duration: '4周',
-      completed: false,
-      subtasks: [
-        { id: '3-1', title: '组件和Props', completed: false },
-        { id: '3-2', title: 'State和生命周期', completed: false },
-        { id: '3-3', title: 'Hooks使用', completed: false },
-        { id: '3-4', title: '项目实战', completed: false },
-      ],
-    },
-    {
-      id: '4',
-      title: '构建工具和部署',
-      description: '学习项目构建和部署流程',
-      duration: '2周',
-      completed: false,
-      subtasks: [
-        { id: '4-1', title: 'Webpack/Vite配置', completed: false },
-        { id: '4-2', title: 'Git版本控制', completed: false },
-        { id: '4-3', title: '部署到云平台', completed: false },
-      ],
-    },
-  ]);
+const getTaskVisual = (type: Task['type']) => {
+  if (type === 'leetcode') {
+    return {
+      icon: Code2,
+      iconClassName: 'text-sky-400',
+      badgeClassName: 'border-sky-500/40 text-sky-300 bg-sky-500/10',
+      label: 'LeetCode',
+    };
+  }
 
-  const [expandedStep, setExpandedStep] = useState<string | null>('2');
+  if (type === 'project') {
+    return {
+      icon: Rocket,
+      iconClassName: 'text-violet-400',
+      badgeClassName: 'border-violet-500/40 text-violet-300 bg-violet-500/10',
+      label: 'Project',
+    };
+  }
 
-  const toggleSubtask = (stepId: string, subtaskId: string) => {
-    setSteps((prevSteps) =>
-      prevSteps.map((step) => {
-        if (step.id === stepId) {
-          const updatedSubtasks = step.subtasks.map((subtask) =>
-            subtask.id === subtaskId
-              ? { ...subtask, completed: !subtask.completed }
-              : subtask
-          );
-          const allCompleted = updatedSubtasks.every((st) => st.completed);
-          return {
-            ...step,
-            subtasks: updatedSubtasks,
-            completed: allCompleted,
-          };
-        }
-        return step;
-      })
-    );
+  if (type === 'feynman') {
+    return {
+      icon: MessageSquare,
+      iconClassName: 'text-emerald-400',
+      badgeClassName: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10',
+      label: 'Feynman',
+    };
+  }
+
+  if (type === 'reinforcement') {
+    return {
+      icon: Dumbbell,
+      iconClassName: 'text-amber-400',
+      badgeClassName: 'border-amber-500/40 text-amber-300 bg-amber-500/10',
+      label: 'Reinforcement',
+    };
+  }
+
+  return {
+    icon: Sparkles,
+    iconClassName: 'text-slate-300',
+    badgeClassName: 'border-slate-600 text-slate-300 bg-slate-800/40',
+    label: 'Concept',
   };
+};
 
-  const calculateProgress = (step: Step) => {
-    const completed = step.subtasks.filter((st) => st.completed).length;
-    return (completed / step.subtasks.length) * 100;
-  };
-
-  const overallProgress =
-    (steps.filter((s) => s.completed).length / steps.length) * 100;
-
+export function StepBreakdown({ tasks, completedTaskIds, onTaskComplete }: StepBreakdownProps) {
   return (
-    <div className="space-y-6">
-      {/* Overall Progress */}
-      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-gray-800">总体进度</h3>
-          <span className="text-2xl font-bold text-indigo-600">
-            {Math.round(overallProgress)}%
-          </span>
-        </div>
-        <Progress value={overallProgress} className="h-3" />
-        <p className="text-sm text-gray-600 mt-2">
-          已完成 {steps.filter((s) => s.completed).length} / {steps.length} 个主要步骤
-        </p>
-      </div>
+    <div className="grid gap-3">
+      {tasks.map((task, index) => {
+        const visual = getTaskVisual(task.type);
+        const Icon = visual.icon;
+        const isCompleted = Boolean(completedTaskIds[task.id]);
 
-      {/* Steps List */}
-      <div className="space-y-3">
-        {steps.map((step, index) => {
-          const progress = calculateProgress(step);
-          const isExpanded = expandedStep === step.id;
+        return (
+          <Card
+            key={task.id}
+            className="group border-slate-800 bg-slate-950/40 p-3 transition-all duration-300 hover:border-amber-500/30"
+          >
+            <CardContent className="p-0">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-sm border border-slate-800 bg-slate-900 text-[10px] font-mono text-slate-500 transition-colors group-hover:text-amber-400">
+                  {String(index + 1).padStart(2, '0')}
+                </div>
 
-          return (
-            <motion.div
-              key={step.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <Card className="overflow-hidden hover:shadow-md transition-shadow">
-                <CardHeader
-                  className="cursor-pointer p-4 bg-white hover:bg-gray-50 transition-colors"
-                  onClick={() =>
-                    setExpandedStep(isExpanded ? null : step.id)
-                  }
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 mt-1">
-                      {step.completed ? (
-                        <CheckCircle2 className="w-6 h-6 text-green-500" />
-                      ) : (
-                        <Circle className="w-6 h-6 text-gray-400" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4 mb-2">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">
-                            步骤 {index + 1}: {step.title}
-                          </h3>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {step.description}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Badge
-                            variant="secondary"
-                            className="flex items-center gap-1"
-                          >
-                            <Clock className="w-3 h-3" />
-                            {step.duration}
+                <div className="flex-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs text-slate-200 transition-colors group-hover:text-slate-100">
+                        {task.title}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className={`text-[10px] ${visual.badgeClassName}`}>
+                          <Icon className={`mr-1 h-3 w-3 ${visual.iconClassName}`} />
+                          {visual.label}
+                        </Badge>
+                        {task.subTasks?.length ? (
+                          <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-300">
+                            {task.subTasks.length} sub tasks
                           </Badge>
-                          <ChevronRight
-                            className={`w-5 h-5 text-gray-400 transition-transform ${
-                              isExpanded ? 'rotate-90' : ''
-                            }`}
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Progress value={progress} className="h-2 flex-1" />
-                        <span className="text-sm text-gray-600 font-medium">
-                          {Math.round(progress)}%
-                        </span>
+                        ) : null}
                       </div>
                     </div>
-                  </div>
-                </CardHeader>
 
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
+                    <Button
+                      size="sm"
+                      variant={isCompleted ? 'secondary' : 'outline'}
+                      className={isCompleted ? 'h-7 border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'h-7 border-slate-700 text-slate-300 hover:border-emerald-500/40 hover:text-emerald-300'}
+                      onClick={() => onTaskComplete(task)}
                     >
-                      <CardContent className="p-4 pt-0 bg-gray-50">
-                        <div className="space-y-2 ml-10">
-                          {step.subtasks.map((subtask) => (
-                            <div
-                              key={subtask.id}
-                              className="flex items-center gap-3 p-3 bg-white rounded-lg hover:shadow-sm transition-shadow"
-                            >
-                              <Checkbox
-                                id={subtask.id}
-                                checked={subtask.completed}
-                                onCheckedChange={() =>
-                                  toggleSubtask(step.id, subtask.id)
-                                }
-                              />
-                              <label
-                                htmlFor={subtask.id}
-                                className={`flex-1 text-sm cursor-pointer ${
-                                  subtask.completed
-                                    ? 'line-through text-gray-500'
-                                    : 'text-gray-700'
-                                }`}
-                              >
-                                {subtask.title}
-                              </label>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </div>
+                      <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                      {isCompleted ? '已完成' : '完成'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

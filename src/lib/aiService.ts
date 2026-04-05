@@ -23,6 +23,79 @@ export const REINFORCE_PROMPT = [
   'JSON 结构必须为：{"subTasks":[{"title":"string","type":"reinforcement","estimatedXP":number}]}.',
 ].join('\n');
 
+type PromptMode = 'breakdown' | 'reinforce' | 'roadmap';
+type TargetLevel = 'Junior' | 'Mid' | 'Senior';
+
+export interface RoadmapContext {
+  mode: PromptMode;
+  targetLevel?: TargetLevel;
+  nodeTitle?: string;
+  nodeFocus?: string;
+  taskTitle?: string;
+  historyTasks?: Array<{ title: string; type: string }>;
+}
+
+const BASE_JSON_CONTRACT = [
+  '严格输出 JSON 对象，不要 Markdown、不要解释、不要多余字段。',
+  '任务 type 仅允许：concept、project、leetcode、feynman、reinforcement。',
+  '标题必须可执行且简洁，estimatedXP 为正整数。',
+].join('\n');
+
+export const generateNodePrompt = (context: RoadmapContext) => {
+  if (context.mode === 'breakdown') {
+    return {
+      systemPrompt: [
+        BREAKDOWN_PROMPT,
+        BASE_JSON_CONTRACT,
+        '你是“任务碎化专家”。每个子任务必须在咖啡时间内可完成（约 15-30 分钟）。',
+      ].join('\n'),
+      userPrompt: [
+        '请将原任务拆成 3 个微任务。',
+        `当前节点标题：${context.nodeTitle ?? '未提供'}`,
+        `当前节点 focus：${context.nodeFocus ?? '未提供'}`,
+        `待拆解任务标题：${context.taskTitle ?? '未提供'}`,
+        '输出 JSON：{"subTasks":[{"title":"string","type":"concept|project|leetcode","estimatedXP":number}]}',
+      ].join('\n'),
+    };
+  }
+
+  if (context.mode === 'reinforce') {
+    return {
+      systemPrompt: [
+        REINFORCE_PROMPT,
+        BASE_JSON_CONTRACT,
+        '你是“技术面试官”。必须按三段递进生成 3 个任务：概念抽查 -> 边界 Case -> 代码纠错。',
+      ].join('\n'),
+      userPrompt: [
+        '请围绕节点生成强化追问。',
+        `节点标题：${context.nodeTitle ?? '未提供'}`,
+        `节点 focus：${context.nodeFocus ?? '未提供'}`,
+        `历史任务：${JSON.stringify(context.historyTasks ?? [], null, 2)}`,
+        '输出 JSON：{"subTasks":[{"title":"string","type":"reinforcement","estimatedXP":number}]}',
+      ].join('\n'),
+    };
+  }
+
+  const seniorRule = context.targetLevel === 'Senior'
+    ? '若生成任务列表，最后一个任务必须为 {"type":"feynman","title":"向 AI 解释此核心原理，并接受逻辑评估"}。'
+    : '按常规任务生成规则输出。';
+
+  return {
+    systemPrompt: [
+      BASE_JSON_CONTRACT,
+      '你是学习路线设计器。输出节点任务时必须确保结构可执行。',
+      seniorRule,
+    ].join('\n'),
+    userPrompt: [
+      '请基于上下文生成节点任务建议。',
+      `目标等级：${context.targetLevel ?? '未提供'}`,
+      `节点标题：${context.nodeTitle ?? '未提供'}`,
+      `节点 focus：${context.nodeFocus ?? '未提供'}`,
+      '输出 JSON：{"tasks":[{"title":"string","type":"concept|project|leetcode|feynman|reinforcement","estimatedXP":number}]}',
+    ].join('\n'),
+  };
+};
+
 interface AIJsonResponse {
   subTasks?: unknown;
   tasks?: unknown;
@@ -179,14 +252,12 @@ const requestViaGemini = async (systemPrompt: string, userPrompt: string): Promi
 };
 
 export const buildBreakdownPrompt = (taskTitle: string, nodeFocus: string, nodeTitle?: string) => ({
-  systemPrompt: BREAKDOWN_PROMPT,
-  userPrompt: [
-    '请基于以下上下文生成 3 个原子化子任务。',
-    `当前节点标题：${nodeTitle ?? '未提供'}`,
-    `当前节点 focus：${nodeFocus}`,
-    `待拆解任务标题：${taskTitle}`,
-    '请输出符合约束的 JSON。',
-  ].join('\n'),
+  ...generateNodePrompt({
+    mode: 'breakdown',
+    nodeTitle,
+    nodeFocus,
+    taskTitle,
+  }),
 });
 
 export const buildReinforcePrompt = (
@@ -194,14 +265,12 @@ export const buildReinforcePrompt = (
   nodeFocus: string,
   historyTasks: Array<{ title: string; type: string }>
 ) => ({
-  systemPrompt: REINFORCE_PROMPT,
-  userPrompt: [
-    '请基于以下节点历史生成 3 个递进式追问任务。',
-    `节点标题：${nodeTitle}`,
-    `节点 focus：${nodeFocus}`,
-    `历史任务：${JSON.stringify(historyTasks, null, 2)}`,
-    '请输出符合约束的 JSON。',
-  ].join('\n'),
+  ...generateNodePrompt({
+    mode: 'reinforce',
+    nodeTitle,
+    nodeFocus,
+    historyTasks,
+  }),
 });
 
 export async function requestAI(systemPrompt: string, userPrompt: string): Promise<unknown> {
