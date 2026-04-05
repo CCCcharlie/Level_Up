@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { toast } from 'sonner';
+import { buildBreakdownPrompt, buildReinforcePrompt, normalizeTaskType, requestAI } from '../lib/aiService.ts';
 import { supabase } from '../lib/supabase';
 import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
 
@@ -171,39 +173,51 @@ const serializeRoadmapNodes = (nodes: RoadmapNode[]) =>
     tasks: node.tasks.map((task) => ({ ...task })),
   }));
 
-const buildReinforcementTasks = (node: RoadmapNode): Task[] => {
-  const prompts = [
-    `围绕「${node.focus}」的核心概念是什么？`,
-    `如果要用自己的话解释「${node.focus}」，你会怎么回答？`,
-    `针对「${node.focus}」，你还能补充哪些关键边界条件？`,
-  ];
+const BREAKDOWN_TASK_TYPES: TaskType[] = ['concept', 'project', 'leetcode'];
 
-  return prompts.map((prompt, index) =>
-    createTask(node.id, prompt, 'reinforcement', node.reinforcementLevel + index + 1, {
-      referenceId: node.id,
-      estimatedXP: 10,
+const normalizeEstimatedXP = (value: unknown, fallback: number) =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+
+const extractAIMappedTasks = (
+  payload: unknown,
+  fallbackType: TaskType,
+  scopeId: string,
+  referenceId: string
+): Task[] => {
+  const rawTasks = (() => {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (isRecord(payload) && Array.isArray(payload.subTasks)) {
+      return payload.subTasks;
+    }
+
+    if (isRecord(payload) && Array.isArray(payload.tasks)) {
+      return payload.tasks;
+    }
+
+    return [];
+  })();
+
+  return rawTasks
+    .map((item, index): Task | null => {
+      if (!isRecord(item) || typeof item.title !== 'string') {
+        return null;
+      }
+
+      return createTask(
+        scopeId,
+        item.title,
+        normalizeTaskType(item.type, [fallbackType, ...BREAKDOWN_TASK_TYPES], fallbackType),
+        index + 1,
+        {
+          referenceId,
+          estimatedXP: normalizeEstimatedXP(item.estimatedXP, 10),
+        }
+      );
     })
-  );
-};
-
-const buildBreakdownTasks = (task: Task, nodeId: string): Task[] => {
-  const baseXp = task.estimatedXP ?? 30;
-  const perTaskXp = Math.max(5, Math.floor(baseXp / 3));
-
-  return [
-    createTask(nodeId, '阅读文档', 'concept', 1, {
-      referenceId: task.id,
-      estimatedXP: perTaskXp,
-    }),
-    createTask(nodeId, '代码实践', 'project', 2, {
-      referenceId: task.id,
-      estimatedXP: perTaskXp,
-    }),
-    createTask(nodeId, '核心回答', 'feynman', 3, {
-      referenceId: task.id,
-      estimatedXP: perTaskXp,
-    }),
-  ];
+    .filter((task): task is Task => Boolean(task));
 };
 
 const syncRoadmapToSupabase = async (userId: string, roadmap: RoadmapNode[]) => {
@@ -563,11 +577,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     const nodeIndex = currentRoadmap.findIndex((node) => node.id === nodeId);
 
     if (nodeIndex < 0) {
+      toast.error('未找到可强化的节点。');
       return;
     }
 
     const sourceNode = currentRoadmap[nodeIndex];
     const nextReinforcementLevel = sourceNode.reinforcementLevel + 1;
+    const loadingToastId = toast.loading('AI 正在重构你的学习路径...');
 
     set((state) => ({
       dynamicRoadmap: state.dynamicRoadmap.map((node) =>
@@ -582,11 +598,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     }));
 
     try {
-      const reinforcementTasks = buildReinforcementTasks({
-        ...sourceNode,
-        reinforcementLevel: nextReinforcementLevel,
-        isReinforcing: true,
-      });
+      const historyTasks = sourceNode.tasks.map((task) => ({
+        title: task.title,
+        type: task.type,
+      }));
+      const prompt = buildReinforcePrompt(sourceNode.title, sourceNode.focus, historyTasks);
+      const aiResponse = await requestAI(prompt.systemPrompt, prompt.userPrompt);
+      const reinforcementTasks = extractAIMappedTasks(aiResponse, 'reinforcement', sourceNode.id, sourceNode.id);
+
+      if (reinforcementTasks.length === 0) {
+        throw new Error('AI did not return valid reinforcement tasks.');
+      }
 
       const nextRoadmap = currentRoadmap.map((node) =>
         node.id === nodeId
@@ -600,6 +622,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       );
 
       set({ dynamicRoadmap: nextRoadmap });
+      toast.success('AI 已完成节点强化。', { id: loadingToastId });
 
       const currentUser = get().currentUser;
 
@@ -612,63 +635,78 @@ export const useGameStore = create<GameState>((set, get) => ({
           node.id === nodeId
             ? {
                 ...node,
+                reinforcementLevel: sourceNode.reinforcementLevel,
                 isReinforcing: false,
               }
             : node
         ),
       }));
+      toast.error('AI 接口失败，已保留原任务，请稍后再试。', { id: loadingToastId });
       console.error('[useGameStore:reinforceNode] Failed to reinforce node:', error);
     }
   },
 
   breakdownTask: async (taskId) => {
     const currentRoadmap = get().dynamicRoadmap;
-    let changed = false;
+    const targetNode = currentRoadmap.find((node) => node.tasks.some((task) => task.id === taskId));
 
-    const nextRoadmap = currentRoadmap.map((node) => {
-      const taskIndex = node.tasks.findIndex((task) => task.id === taskId);
+    if (!targetNode) {
+      toast.error('未找到可拆解的任务。');
+      return;
+    }
 
-      if (taskIndex < 0) {
-        return node;
+    const targetTask = targetNode.tasks.find((task) => task.id === taskId);
+
+    if (!targetTask) {
+      toast.error('未找到可拆解的任务。');
+      return;
+    }
+
+    const loadingToastId = toast.loading('AI 正在重构你的学习路径...');
+
+    try {
+      const prompt = buildBreakdownPrompt(targetTask.title, targetNode.focus, targetNode.title);
+      const aiResponse = await requestAI(prompt.systemPrompt, prompt.userPrompt);
+      const subTasks = extractAIMappedTasks(aiResponse, 'concept', targetNode.id, targetTask.id);
+
+      if (subTasks.length === 0) {
+        throw new Error('AI did not return valid breakdown tasks.');
       }
 
-      const targetTask = node.tasks[taskIndex];
-
-      if (targetTask.subTasks && targetTask.subTasks.length > 0) {
-        return node;
-      }
-
-      changed = true;
-      const subTasks = buildBreakdownTasks(targetTask, node.id);
       const totalAllocatedXp = subTasks.reduce((sum, subTask) => sum + (subTask.estimatedXP ?? 0), 0);
+      const nextRoadmap = currentRoadmap.map((node) => {
+        if (node.id !== targetNode.id) {
+          return node;
+        }
 
-      return {
-        ...node,
-        tasks: node.tasks.map((task) =>
-          task.id === taskId
-            ? {
-                ...task,
-                subTasks,
-                estimatedXP: totalAllocatedXp,
-              }
-            : task
-        ),
-      };
-    });
+        return {
+          ...node,
+          tasks: node.tasks.map((task) =>
+            task.id === taskId
+              ? {
+                  ...task,
+                  subTasks,
+                  estimatedXP: totalAllocatedXp,
+                }
+              : task
+          ),
+        };
+      });
 
-    if (!changed) {
-      return;
+      set({ dynamicRoadmap: nextRoadmap });
+      toast.success('AI 已完成任务拆解。', { id: loadingToastId });
+
+      const currentUser = get().currentUser;
+
+      if (!currentUser) {
+        return;
+      }
+
+      await syncRoadmapToSupabase(currentUser.id, nextRoadmap);
+    } catch (error) {
+      toast.error('AI 接口失败，已保留原任务，请稍后再试。', { id: loadingToastId });
+      console.error('[useGameStore:breakdownTask] Failed to breakdown task:', error);
     }
-
-    set({ dynamicRoadmap: nextRoadmap });
-
-    const currentUser = get().currentUser;
-
-    if (!currentUser) {
-      return;
-    }
-
-    await syncRoadmapToSupabase(currentUser.id, nextRoadmap);
   },
 
   trackProgress: async (skillId, xpGained, isfinished) => {
