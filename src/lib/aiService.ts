@@ -396,6 +396,105 @@ export const buildExtensionPrompt = (
   ].join('\n'),
 });
 
+const isBranchType = (value: unknown): value is 'deep_dive' | 'side_quest' | 'speed_run' =>
+  value === 'deep_dive' || value === 'side_quest' || value === 'speed_run';
+
+const normalizeBranchPayload = (payload: unknown) => {
+  const rawNodes = (() => {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (isRecord(payload) && Array.isArray(payload.nodes)) {
+      return payload.nodes;
+    }
+
+    return [];
+  })();
+
+  const fallbackBranchTypes: Array<'deep_dive' | 'side_quest' | 'speed_run'> = ['deep_dive', 'side_quest', 'speed_run'];
+
+  return rawNodes
+    .map((node, index) => {
+      if (!isRecord(node)) {
+        return null;
+      }
+
+      const tasks = Array.isArray(node.tasks)
+        ? node.tasks.filter(
+            (task): task is { title: string; type: string; estimatedXP?: number } =>
+              isRecord(task) && typeof task.title === 'string' && typeof task.type === 'string'
+          )
+        : [];
+
+      if (
+        typeof node.id !== 'string' ||
+        typeof node.title !== 'string' ||
+        typeof node.focus !== 'string' ||
+        tasks.length < 2
+      ) {
+        return null;
+      }
+
+      return {
+        id: node.id,
+        title: node.title,
+        focus: node.focus,
+        requiredXP: typeof node.requiredXP === 'number' && Number.isFinite(node.requiredXP) ? Math.round(node.requiredXP) : 1500,
+        status: node.status === 'current' || node.status === 'completed' ? node.status : 'locked',
+        reinforcementLevel: typeof node.reinforcementLevel === 'number' ? node.reinforcementLevel : 0,
+        isReinforcing: typeof node.isReinforcing === 'boolean' ? node.isReinforcing : false,
+        branchType: isBranchType(node.branchType) ? node.branchType : fallbackBranchTypes[index % fallbackBranchTypes.length],
+        tasks,
+      };
+    })
+    .filter((node): node is {
+      id: string;
+      title: string;
+      focus: string;
+      requiredXP: number;
+      status: 'locked' | 'current' | 'completed';
+      reinforcementLevel: number;
+      isReinforcing: boolean;
+      branchType: 'deep_dive' | 'side_quest' | 'speed_run';
+      tasks: Array<{ title: string; type: string; estimatedXP?: number }>;
+    } => Boolean(node));
+};
+
+export const requestBranchSuggestions = async (
+  nodeTitle: string,
+  nodeFocus: string,
+  userLevel: string
+): Promise<unknown> => {
+  const systemPrompt = [
+    '你是一个严谨的技术导师与学习路径架构师。',
+    BASE_JSON_CONTRACT,
+    '你必须严格返回 JSON 数组，数组长度必须为 3，且每一项都是完整的 RoadmapNode 对象。',
+    '每个节点必须包含 id、title、focus、requiredXP、branchType、tasks 字段。',
+    '每个节点 tasks 至少 2 个，推荐 2-3 个，任务类型可在 concept/project/leetcode/feynman 中组合。',
+    '节点 1 必须是 deep_dive：聚焦底层原理进阶。',
+    '节点 2 必须是 side_quest：聚焦相关生态或工具扩展。',
+    '节点 3 必须是 speed_run：聚焦高难度综合实战或面试挑战。',
+    '三个分支都必须收束回用户最终目标，避免知识迷失。',
+  ].join('\n');
+
+  const userPrompt = [
+    `用户刚刚完成了节点【${nodeTitle}】，其核心是【${nodeFocus}】。`,
+    `请基于此生成 3 个后续的单节点路线，并收束回用户的 ${userLevel} 最终目标。`,
+    '输出必须是 JSON 数组，不要对象包裹，不要 Markdown。',
+    '输出示例：[{"id":"string","title":"string","focus":"string","requiredXP":number,"branchType":"deep_dive|side_quest|speed_run","tasks":[{"title":"string","type":"concept|project|leetcode|feynman","estimatedXP":number}]}]',
+  ].join('\n');
+
+  const response = await requestAI(systemPrompt, userPrompt);
+  const normalized = normalizeBranchPayload(response);
+
+  if (normalized.length !== 3) {
+    throw new Error('Branch suggestion response is invalid. Expected exactly 3 roadmap nodes.');
+  }
+
+  return normalized;
+};
+
 export async function requestAI(systemPrompt: string, userPrompt: string): Promise<unknown> {
   const providers: Array<{
     name: string;

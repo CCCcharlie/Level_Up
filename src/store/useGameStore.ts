@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
-import { buildExtensionPrompt, generateNodePrompt, normalizeTaskType, requestAI } from '../lib/aiService.ts';
+import {
+  buildExtensionPrompt,
+  generateNodePrompt,
+  normalizeTaskType,
+  requestAI,
+  requestBranchSuggestions,
+} from '../lib/aiService.ts';
 import { INITIAL_ROADMAPS } from '../data/roadmapTemplates';
 import { supabase } from '../lib/supabase';
 import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
@@ -31,6 +37,8 @@ export interface RoadmapNode {
   requiredXP: number;
   reinforcementLevel: number;
   isReinforcing: boolean;
+  hasBranched?: boolean;
+  branchType?: 'deep_dive' | 'side_quest' | 'speed_run';
   tasks: Task[];     // 节点关联的任务列表
 }
 
@@ -644,6 +652,8 @@ interface GameState {
   currentUser: CurrentUser | null;
   isSyncing: boolean;
   isExtending: boolean;
+  branchingNodeId: string | null;
+  branchSuggestions: RoadmapNode[] | null;
 
   // 2. 核心进度与经验值 (PRD 3.3)
   totalExp: number;
@@ -665,6 +675,8 @@ interface GameState {
   setSkillPoints: (skillPoints: number) => void;
   setTargetLevel: (direction: string, level: TargetLevel) => void;
   extendRoadmapWithAI: () => Promise<void>;
+  generateBranchSuggestions: (nodeId: string) => Promise<void>;
+  addBranchToRoadmap: (parentNodeId: string, chosenNode: RoadmapNode) => Promise<void>;
   setActiveRoadmapNode: (nodeId: string) => void;
   completeGapNode: (nodeId: string) => void;
   trackProgress: (skillId: string, xpGained: number, isfinished?: boolean) => Promise<void>;
@@ -685,6 +697,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentUser: null,
   isSyncing: false,
   isExtending: false,
+  branchingNodeId: null,
+  branchSuggestions: null,
   totalExp: 3250,
   level: 8,
   skillPoints: 15,
@@ -921,6 +935,87 @@ export const useGameStore = create<GameState>((set, get) => ({
       console.error('[useGameStore:extendRoadmapWithAI] Failed to extend roadmap:', error);
     } finally {
       set({ isExtending: false });
+    }
+  },
+
+  generateBranchSuggestions: async (nodeId) => {
+    set({ branchingNodeId: nodeId, branchSuggestions: null });
+
+    try {
+      const sourceNode = get().dynamicRoadmap.find((node) => node.id === nodeId);
+
+      if (!sourceNode) {
+        throw new Error('Source roadmap node not found.');
+      }
+
+      const aiResponse = await requestBranchSuggestions(sourceNode.title, sourceNode.focus, get().userTargetLevel);
+      const branchTypes: Array<'deep_dive' | 'side_quest' | 'speed_run'> = ['deep_dive', 'side_quest', 'speed_run'];
+      const suggestions = extractAIRoadmapNodes(aiResponse, get().userTargetLevel)
+        .slice(0, 3)
+        .map((node, index) => ({
+          ...node,
+          status: 'locked' as const,
+          branchType: node.branchType ?? branchTypes[index % branchTypes.length],
+          hasBranched: false,
+        }));
+
+      if (suggestions.length === 0) {
+        throw new Error('AI did not return branch suggestions.');
+      }
+
+      set({ branchSuggestions: suggestions, branchingNodeId: null });
+    } catch (error) {
+      set({ branchingNodeId: null, branchSuggestions: null });
+      toast.error('分支建议生成失败，请稍后重试。');
+      console.error('[useGameStore:generateBranchSuggestions] Failed to generate branch suggestions:', error);
+    }
+  },
+
+  addBranchToRoadmap: async (parentNodeId, chosenNode) => {
+    const currentState = get();
+    const parentIndex = currentState.dynamicRoadmap.findIndex((node) => node.id === parentNodeId);
+
+    if (parentIndex < 0) {
+      toast.error('未找到可插入分支的父节点。');
+      return;
+    }
+
+    const existingIds = new Set(currentState.dynamicRoadmap.map((node) => node.id));
+    const insertedNodeId = createUniqueNodeId(slugify(chosenNode.title) || chosenNode.id, existingIds, parentIndex + 1);
+    const insertedNode: RoadmapNode = {
+      ...chosenNode,
+      id: insertedNodeId,
+      status: 'locked',
+      reinforcementLevel: 0,
+      isReinforcing: false,
+      hasBranched: false,
+      tasks: chosenNode.tasks.map((task, taskIndex) => ({
+        ...task,
+        id: createTaskId(insertedNodeId, task.title, taskIndex + 1),
+        referenceId: insertedNodeId,
+        subTasks: task.subTasks?.map((subTask, subTaskIndex) => ({
+          ...subTask,
+          id: createTaskId(`${insertedNodeId}-${taskIndex + 1}`, subTask.title, subTaskIndex + 1),
+        })),
+      })),
+    };
+
+    const nextRoadmap = [...currentState.dynamicRoadmap];
+    nextRoadmap[parentIndex] = {
+      ...nextRoadmap[parentIndex],
+      hasBranched: true,
+    };
+    nextRoadmap.splice(parentIndex + 1, 0, insertedNode);
+
+    set({
+      dynamicRoadmap: nextRoadmap,
+      branchSuggestions: null,
+      branchingNodeId: null,
+    });
+
+    const currentUser = get().currentUser;
+    if (currentUser) {
+      await syncRoadmapToSupabase(currentUser.id, nextRoadmap);
     }
   },
 
@@ -1185,6 +1280,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     dynamicRoadmap: [], 
     gapNodes: [],
     activeRoadmapNodeId: null,
+    branchingNodeId: null,
+    branchSuggestions: null,
     currentUser: null,
     skillProgress: {},
   }),
