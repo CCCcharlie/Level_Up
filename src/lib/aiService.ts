@@ -4,6 +4,10 @@ const GEMINI_MODEL = (import.meta.env.VITE_GEMINI_MODEL as string | undefined) ?
 const OPENAI_API_KEY = (import.meta.env.VITE_OPENAI_API_KEY as string | undefined) ?? '';
 const OPENAI_MODEL = (import.meta.env.VITE_OPENAI_MODEL as string | undefined) ?? 'gpt-4o-mini';
 
+const GROQ_API_KEY = (import.meta.env.VITE_GROQ_API_KEY as string | undefined) ?? '';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+
+
 
 export const BREAKDOWN_PROMPT = [
   '你是一个学习路径重构引擎。',
@@ -347,6 +351,44 @@ const requestViaGemini = async (systemPrompt: string, userPrompt: string): Promi
   return extractJsonPayload(content);
 };
 
+
+const requestViaGroq = async (systemPrompt: string, userPrompt: string): Promise<unknown> => {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw createProviderError('Groq', response.status, errorText);
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string | null } }>;
+  };
+
+  const content = payload.choices?.[0]?.message?.content;
+
+  if (!content) {
+    throw new Error('Groq response did not contain JSON content.');
+  }
+
+  return extractJsonPayload(content);
+};
+//
+
 export const buildBreakdownPrompt = (taskTitle: string, nodeFocus: string, nodeTitle?: string) => ({
   ...generateNodePrompt({
     mode: 'breakdown',
@@ -501,6 +543,11 @@ export async function requestAI(systemPrompt: string, userPrompt: string): Promi
     isConfigured: boolean;
     request: (systemPrompt: string, userPrompt: string) => Promise<unknown>;
   }> = [
+    {
+      name: 'Groq',
+      isConfigured: Boolean(GROQ_API_KEY),
+      request: requestViaGroq,
+    },
     {
       name: 'Edge function',
       isConfigured: Boolean(EDGE_FUNCTION_URL),
