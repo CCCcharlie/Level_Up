@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import useGameStore from '../store/useGameStore';
 import { CareerOnboarding } from './components/CareerOnboarding';
 import  LearningPathFlow  from './components/LearningPathFlow';
@@ -21,13 +21,65 @@ import { Zap, Target, LayoutDashboard, Compass } from 'lucide-react';
 
 export default function App() {
   // 从 Store 获取全局状态
-  const { 
+  const {
+    fetchUserData,
+    isSyncing,
     isOnboarded, 
     level, 
     totalExp, 
     careerDirection, 
     userTargetLevel 
   } = useGameStore();
+
+  useEffect(() => {
+    void fetchUserData();
+  }, [fetchUserData]);
+
+  if (isSyncing) {
+    return (
+      <div className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-black text-slate-200">
+        <style>
+          {`
+            @keyframes neural-scan {
+              0% { transform: translateY(-120%); opacity: 0; }
+              10% { opacity: 0.35; }
+              40% { opacity: 0.2; }
+              100% { transform: translateY(120%); opacity: 0; }
+            }
+
+            @keyframes crt-flicker {
+              0%, 18%, 22%, 100% { opacity: 0.12; }
+              20% { opacity: 0.05; }
+              21% { opacity: 0.16; }
+            }
+          `}
+        </style>
+
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,rgba(124,58,237,0.28),transparent_58%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(180deg,rgba(255,255,255,0.04)_0,rgba(255,255,255,0.04)_1px,transparent_1px,transparent_3px)]" style={{ animation: 'crt-flicker 2.2s linear infinite' }} />
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div
+            className="absolute left-0 right-0 h-32 bg-gradient-to-b from-cyan-500/0 via-cyan-300/25 to-violet-500/0"
+            style={{ animation: 'neural-scan 2.8s linear infinite' }}
+          />
+        </div>
+
+        <div className="relative z-10 flex flex-col items-center gap-6">
+          <div className="relative">
+            <div className="absolute -inset-8 rounded-full bg-violet-500/30 blur-2xl" />
+            <div className="absolute -inset-3 rounded-full border border-cyan-300/30 animate-ping" />
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-violet-400/70 bg-slate-950 shadow-[0_0_45px_rgba(139,92,246,0.55)]">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-cyan-300 via-violet-400 to-blue-500" />
+            </div>
+          </div>
+
+          <p className="px-6 text-center text-[11px] font-mono uppercase tracking-[0.28em] text-cyan-200/90">
+            [ SYSTEM INITIALIZING... FETCHING NEURAL DATA ]
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // 如果未完成引导，显示入站界面
   if (!isOnboarded) {
@@ -37,17 +89,14 @@ export default function App() {
   // 计算当前等级经验百分比 (假设每级 1000 XP)
   const expPercentage = (totalExp % 1000) / 10;
 
+  return (
+    <div className="dark relative flex h-screen w-full overflow-hidden bg-slate-950 font-sans text-slate-200 selection:bg-purple-500/30">
+      {/* 背景径向渐变 */}
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_20%_0%,rgba(76,29,149,0.15)_0%,transparent_50%)]" />
 
-return (
-    <SidebarProvider defaultOpen={true}>
-      <div className=" dark flex h-screen w-full bg-slate-950 text-slate-200 overflow-hidden font-sans selection:bg-purple-500/30">
-
-      
-        {/* 背景径向渐变 */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(76,29,149,0.15)_0%,transparent_50%)] pointer-events-none" />
-
+      <SidebarProvider defaultOpen={true}>
         {/* 1. 全局侧边栏 (监控与执行区) */}
-        <Sidebar className="border-r border-slate-800 bg-slate-900/40 backdrop-blur-xl">
+        <Sidebar className="relative z-10 border-r border-slate-800 bg-slate-900/40 backdrop-blur-xl">
           <SidebarHeader className="p-6 border-b border-slate-800/50">
             <div className="flex flex-col gap-4">
               <div className="flex items-center gap-3">
@@ -96,7 +145,7 @@ return (
         </Sidebar>
 
         {/* 2. 主舞台 (宏观视图区) */}
-        <main className="flex-1 flex flex-col relative overflow-hidden h-screen">
+        <main className="relative z-10 flex h-full flex-1 flex-col overflow-hidden">
           <header className="h-14 border-b border-slate-800/50 flex items-center px-6 bg-slate-950/50 backdrop-blur-sm z-20">
             <SidebarTrigger className="text-slate-400 hover:text-white transition-colors" />
             <div className="ml-4 h-4 w-px bg-slate-800" />
@@ -124,7 +173,7 @@ return (
             </Tabs>
           </div>
         </main>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </div>
   );
 }

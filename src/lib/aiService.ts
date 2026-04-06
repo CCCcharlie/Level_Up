@@ -23,12 +23,23 @@ export const REINFORCE_PROMPT = [
   'JSON 结构必须为：{"subTasks":[{"title":"string","type":"reinforcement","estimatedXP":number}]}.',
 ].join('\n');
 
+export const ROADMAP_PROMPT = [
+  '你是一个职业成长路线图设计引擎。',
+  '你的任务是基于用户职业方向和目标等级，输出 3-4 个阶段节点。',
+  '每个节点必须包含：title、focus、requiredXP、tasks。',
+  '每个节点 tasks 必须恰好 3 个，且任务类型应混合使用 concept、project、leetcode、feynman。',
+  '节点顺序必须体现渐进难度，首个节点默认 current，其余默认 locked。',
+  '只允许输出严格 JSON，不要输出 Markdown、解释、前后缀文本。',
+  'JSON 结构必须为：{"nodes":[{"title":"string","focus":"string","requiredXP":number,"tasks":[{"title":"string","type":"concept|project|leetcode|feynman","estimatedXP":number}]}]}.',
+].join('\n');
+
 type PromptMode = 'breakdown' | 'reinforce' | 'roadmap';
 type TargetLevel = 'Junior' | 'Mid' | 'Senior';
 
 export interface RoadmapContext {
   mode: PromptMode;
   targetLevel?: TargetLevel;
+  careerDirection?: string;
   nodeTitle?: string;
   nodeFocus?: string;
   taskTitle?: string;
@@ -77,21 +88,22 @@ export const generateNodePrompt = (context: RoadmapContext) => {
   }
 
   const seniorRule = context.targetLevel === 'Senior'
-    ? '若生成任务列表，最后一个任务必须为 {"type":"feynman","title":"向 AI 解释此核心原理，并接受逻辑评估"}。'
+    ? '若目标等级为 Senior，至少一个节点的任务中必须包含 feynman 类型任务。'
     : '按常规任务生成规则输出。';
 
   return {
     systemPrompt: [
+      ROADMAP_PROMPT,
       BASE_JSON_CONTRACT,
-      '你是学习路线设计器。输出节点任务时必须确保结构可执行。',
+      '你是“动态学习路线架构师”。需要保证节点和任务都可直接执行。',
       seniorRule,
     ].join('\n'),
     userPrompt: [
-      '请基于上下文生成节点任务建议。',
+      '请生成完整学习路线图。',
+      `职业方向：${context.careerDirection ?? '未提供'}`,
       `目标等级：${context.targetLevel ?? '未提供'}`,
-      `节点标题：${context.nodeTitle ?? '未提供'}`,
-      `节点 focus：${context.nodeFocus ?? '未提供'}`,
-      '输出 JSON：{"tasks":[{"title":"string","type":"concept|project|leetcode|feynman|reinforcement","estimatedXP":number}]}',
+      '要求：输出 3-4 个节点，每个节点 3 个任务，难度逐步提升。',
+      '输出 JSON：{"nodes":[{"title":"string","focus":"string","requiredXP":number,"tasks":[{"title":"string","type":"concept|project|leetcode|feynman","estimatedXP":number}]}]}',
     ].join('\n'),
   };
 };
@@ -111,6 +123,90 @@ const stripCodeFences = (value: string) =>
     .replace(/\s*```$/i, '');
 
 const parseJson = (value: string): unknown => JSON.parse(stripCodeFences(value));
+
+interface ProviderError extends Error {
+  status?: number;
+  provider?: string;
+}
+
+const createProviderError = (provider: string, status: number, details: string): ProviderError => {
+  const error = new Error(`${provider} request failed with status ${status}${details ? `: ${details}` : ''}`) as ProviderError;
+  error.status = status;
+  error.provider = provider;
+  return error;
+};
+
+const getErrorStatus = (error: unknown): number | null => {
+  if (typeof error !== 'object' || error === null) {
+    return null;
+  }
+
+  if ('status' in error && typeof error.status === 'number') {
+    return error.status;
+  }
+
+  if ('message' in error && typeof error.message === 'string') {
+    const statusMatch = error.message.match(/status\s+(\d{3})/i);
+    if (statusMatch) {
+      return Number(statusMatch[1]);
+    }
+  }
+
+  return null;
+};
+
+const isRateLimitError = (error: unknown): boolean => getErrorStatus(error) === 429;
+
+const RATE_LIMIT_MAX_RETRIES = 3;
+const FALLBACK_BACKOFF_MS = [2000, 4000, 8000] as const;
+const JITTER_RATIO = 0.2;
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+const applyJitter = (baseDelayMs: number): number => {
+  const boundedBase = Math.max(250, Math.round(baseDelayMs));
+  const jitterSpan = Math.round(boundedBase * JITTER_RATIO);
+  const jitterOffset = Math.floor(Math.random() * (jitterSpan * 2 + 1)) - jitterSpan;
+
+  return Math.max(250, boundedBase + jitterOffset);
+};
+
+const parseRetryDelayToMs = (error: unknown): number | null => {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  const message = error.message;
+
+  // Gemini quota errors often contain retryDelay fields like "retryDelay":"36s".
+  const retryDelayMatch = message.match(/retryDelay\s*"?\s*:\s*"?(\d+(?:\.\d+)?)\s*(ms|s)?"?/i);
+  if (!retryDelayMatch) {
+    return null;
+  }
+
+  const numericValue = Number(retryDelayMatch[1]);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return null;
+  }
+
+  const unit = (retryDelayMatch[2] ?? 's').toLowerCase();
+  const delayMs = unit === 'ms' ? numericValue : numericValue * 1000;
+
+  return Math.round(delayMs);
+};
+
+const getRateLimitDelayMs = (error: unknown, retryIndex: number): number => {
+  const parsedRetryDelay = parseRetryDelayToMs(error);
+  const baseDelayMs =
+    parsedRetryDelay && parsedRetryDelay > 0
+      ? parsedRetryDelay
+      : FALLBACK_BACKOFF_MS[Math.min(retryIndex, FALLBACK_BACKOFF_MS.length - 1)];
+
+  return applyJitter(baseDelayMs);
+};
 
 const extractJsonPayload = (value: unknown): AIJsonResponse => {
   if (typeof value === 'string') {
@@ -156,7 +252,7 @@ const requestViaEdgeFunction = async (systemPrompt: string, userPrompt: string):
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(errorText || `Edge function request failed with status ${response.status}`);
+    throw createProviderError('Edge function', response.status, errorText);
   }
 
   const responseText = await response.text();
@@ -192,7 +288,7 @@ const requestViaOpenAI = async (systemPrompt: string, userPrompt: string): Promi
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(errorText || `OpenAI request failed with status ${response.status}`);
+    throw createProviderError('OpenAI', response.status, errorText);
   }
 
   const payload = (await response.json()) as {
@@ -235,7 +331,7 @@ const requestViaGemini = async (systemPrompt: string, userPrompt: string): Promi
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(errorText || `Gemini request failed with status ${response.status}`);
+    throw createProviderError('Gemini', response.status, errorText);
   }
 
   const payload = (await response.json()) as {
@@ -274,19 +370,68 @@ export const buildReinforcePrompt = (
 });
 
 export async function requestAI(systemPrompt: string, userPrompt: string): Promise<unknown> {
-  if (EDGE_FUNCTION_URL) {
-    return requestViaEdgeFunction(systemPrompt, userPrompt);
+  const providers: Array<{
+    name: string;
+    isConfigured: boolean;
+    request: (systemPrompt: string, userPrompt: string) => Promise<unknown>;
+  }> = [
+    {
+      name: 'Edge function',
+      isConfigured: Boolean(EDGE_FUNCTION_URL),
+      request: requestViaEdgeFunction,
+    },
+    {
+      name: 'Gemini',
+      isConfigured: Boolean(GEMINI_API_KEY),
+      request: requestViaGemini,
+    },
+    {
+      name: 'OpenAI',
+      isConfigured: Boolean(OPENAI_API_KEY),
+      request: requestViaOpenAI,
+    },
+  ].filter((provider) => provider.isConfigured);
+
+  if (providers.length === 0) {
+    throw new Error('AI provider is not configured. Set VITE_AI_EDGE_FUNCTION_URL, VITE_GEMINI_API_KEY, or VITE_OPENAI_API_KEY.');
   }
 
-  if (GEMINI_API_KEY) {
-    return requestViaGemini(systemPrompt, userPrompt);
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    let retryCount = 0;
+
+    // Retry only when provider is rate-limited; otherwise fail over immediately.
+    while (true) {
+      try {
+        return await provider.request(systemPrompt, userPrompt);
+      } catch (error) {
+        if (isRateLimitError(error) && retryCount < RATE_LIMIT_MAX_RETRIES) {
+          const delayMs = getRateLimitDelayMs(error, retryCount);
+          retryCount += 1;
+          console.warn(
+            `[requestAI] ${provider.name} rate-limited (429). Retry ${retryCount}/${RATE_LIMIT_MAX_RETRIES} in ${Math.ceil(delayMs / 1000)}s...`
+          );
+          await sleep(delayMs);
+          continue;
+        }
+
+        const status = getErrorStatus(error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        errors.push(`${provider.name}${status ? ` (${status})` : ''}: ${errorMessage}`);
+
+        if (isRateLimitError(error)) {
+          console.warn(`[requestAI] ${provider.name} exceeded retry limit, trying next provider...`);
+        } else {
+          console.warn(`[requestAI] ${provider.name} failed, trying next provider...`, error);
+        }
+
+        break;
+      }
+    }
   }
 
-  if (OPENAI_API_KEY) {
-    return requestViaOpenAI(systemPrompt, userPrompt);
-  }
-
-  throw new Error('AI provider is not configured. Set VITE_AI_EDGE_FUNCTION_URL, VITE_GEMINI_API_KEY, or VITE_OPENAI_API_KEY.');
+  throw new Error(`All configured AI providers failed. ${errors.join(' | ')}`);
 }
 
 export const normalizeTaskType = <T extends string>(value: unknown, allowedTypes: readonly T[], fallback: T): T =>

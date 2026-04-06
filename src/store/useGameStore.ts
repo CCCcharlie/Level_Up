@@ -174,9 +174,284 @@ const serializeRoadmapNodes = (nodes: RoadmapNode[]) =>
   }));
 
 const BREAKDOWN_TASK_TYPES: TaskType[] = ['concept', 'project', 'leetcode'];
+const ROADMAP_TASK_TYPES: TaskType[] = ['concept', 'project', 'leetcode', 'feynman'];
+
+const ROADMAP_FALLBACK_TASK_BLUEPRINTS: Array<{ title: (nodeTitle: string) => string; type: TaskType }> = [
+  {
+    title: (nodeTitle) => `梳理 ${nodeTitle} 的关键概念并输出结构化笔记`,
+    type: 'concept',
+  },
+  {
+    title: (nodeTitle) => `完成一个 ${nodeTitle} 的实战小项目并记录复盘`,
+    type: 'project',
+  },
+  {
+    title: (nodeTitle) => `完成 3 道与 ${nodeTitle} 相关的算法训练题`,
+    type: 'leetcode',
+  },
+];
+
+const getRoadmapBaseRequiredXP = (level: TargetLevel) => {
+  if (level === 'Junior') {
+    return 500;
+  }
+
+  if (level === 'Mid') {
+    return 2000;
+  }
+
+  return 5000;
+};
+
+const normalizeNodeStatus = (value: unknown, index: number): RoadmapNode['status'] => {
+  if (value === 'locked' || value === 'current' || value === 'completed') {
+    return value;
+  }
+
+  return index === 0 ? 'current' : 'locked';
+};
+
+const normalizeRequiredXP = (value: unknown, fallback: number) =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
 
 const normalizeEstimatedXP = (value: unknown, fallback: number) =>
   typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+
+const extractAIRoadmapNodes = (payload: unknown, level: TargetLevel): RoadmapNode[] => {
+  const rawNodes = (() => {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (!isRecord(payload)) {
+      return [];
+    }
+
+    if (Array.isArray(payload.nodes)) {
+      return payload.nodes;
+    }
+
+    if (Array.isArray(payload.roadmap)) {
+      return payload.roadmap;
+    }
+
+    if (Array.isArray(payload.stages)) {
+      return payload.stages;
+    }
+
+    return [];
+  })();
+
+  const baseXP = getRoadmapBaseRequiredXP(level);
+
+  return rawNodes
+    .map((item, index): RoadmapNode | null => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const fallbackNodeTitle = `阶段 ${index + 1}`;
+      const nodeTitle = typeof item.title === 'string' ? item.title : fallbackNodeTitle;
+      const nodeFocus = typeof item.focus === 'string' ? item.focus : `${nodeTitle} 的核心能力建设`;
+      const nodeId =
+        typeof item.id === 'string' ? item.id : `${level.toLowerCase()}-${slugify(nodeTitle) || `stage-${index + 1}`}-${index + 1}`;
+      const rawTasks = Array.isArray(item.tasks) ? item.tasks : [];
+
+      const mappedTasks = rawTasks
+        .map((taskItem, taskIndex): Task | null => {
+          if (typeof taskItem === 'string') {
+            const fallbackType = ROADMAP_FALLBACK_TASK_BLUEPRINTS[taskIndex % ROADMAP_FALLBACK_TASK_BLUEPRINTS.length]?.type ?? 'concept';
+
+            return createTask(nodeId, taskItem, fallbackType, taskIndex + 1, {
+              referenceId: nodeId,
+              estimatedXP: 20,
+            });
+          }
+
+          if (!isRecord(taskItem) || typeof taskItem.title !== 'string') {
+            return null;
+          }
+
+          return createTask(
+            nodeId,
+            taskItem.title,
+            normalizeTaskType(taskItem.type, ROADMAP_TASK_TYPES, 'concept'),
+            taskIndex + 1,
+            {
+              referenceId: nodeId,
+              estimatedXP: normalizeEstimatedXP(taskItem.estimatedXP, 20),
+            }
+          );
+        })
+        .filter((task): task is Task => Boolean(task));
+
+      const normalizedTasks = [...mappedTasks];
+
+      for (let taskIndex = normalizedTasks.length; taskIndex < 3; taskIndex += 1) {
+        const blueprint = ROADMAP_FALLBACK_TASK_BLUEPRINTS[taskIndex % ROADMAP_FALLBACK_TASK_BLUEPRINTS.length];
+
+        normalizedTasks.push(
+          createTask(nodeId, blueprint.title(nodeTitle), blueprint.type, taskIndex + 1, {
+            referenceId: nodeId,
+            estimatedXP: 20,
+          })
+        );
+      }
+
+      return {
+        id: nodeId,
+        title: nodeTitle,
+        focus: nodeFocus,
+        status: normalizeNodeStatus(item.status, index),
+        requiredXP: normalizeRequiredXP(item.requiredXP, baseXP + index * 400),
+        reinforcementLevel: 0,
+        isReinforcing: false,
+        tasks: normalizedTasks.slice(0, 3),
+      };
+    })
+    .filter((node): node is RoadmapNode => Boolean(node));
+};
+
+const buildSafeHarborRoadmap = (level: TargetLevel): RoadmapNode[] => {
+  if (level === 'Junior') {
+    return [
+      {
+        id: 'j1',
+        title: '核心基础构建',
+        focus: '掌握语言底层原理与核心语法',
+        status: 'current',
+        requiredXP: 500,
+        reinforcementLevel: 0,
+        isReinforcing: false,
+        tasks: [
+          createTask('j1', '阅读核心语法文档', 'concept', 1, { estimatedXP: 15 }),
+          createTask('j1', '手写实现基础算法', 'leetcode', 2, { estimatedXP: 20 }),
+          createTask('j1', '完成 5 道基础练习题', 'project', 3, { estimatedXP: 25 }),
+        ],
+      },
+      {
+        id: 'j2',
+        title: '版本控制专家',
+        focus: 'Git 协同开发与分流策略',
+        status: 'locked',
+        requiredXP: 800,
+        reinforcementLevel: 0,
+        isReinforcing: false,
+        tasks: [
+          createTask('j2', '执行一次 Rebase', 'concept', 1, { estimatedXP: 15 }),
+          createTask('j2', '解决合并冲突', 'project', 2, { estimatedXP: 20 }),
+          createTask('j2', '配置 Git Hooks', 'concept', 3, { estimatedXP: 15 }),
+        ],
+      },
+      {
+        id: 'j3',
+        title: '初级实战工程',
+        focus: '独立完成模块化组件开发',
+        status: 'locked',
+        requiredXP: 1200,
+        reinforcementLevel: 0,
+        isReinforcing: false,
+        tasks: [
+          createTask('j3', '封装 Button 组件', 'project', 1, { estimatedXP: 20 }),
+          createTask('j3', '实现 Todo List', 'project', 2, { estimatedXP: 25 }),
+          createTask('j3', '学习 CSS Modules', 'concept', 3, { estimatedXP: 15 }),
+        ],
+      },
+    ];
+  }
+
+  if (level === 'Mid') {
+    return [
+      {
+        id: 'm1',
+        title: '架构模式实践',
+        focus: '深入理解 MVC/MVVM 与设计模式',
+        status: 'current',
+        requiredXP: 2000,
+        reinforcementLevel: 0,
+        isReinforcing: false,
+        tasks: [
+          createTask('m1', '重构旧模块逻辑', 'project', 1, { estimatedXP: 30 }),
+          createTask('m1', '接入状态管理', 'concept', 2, { estimatedXP: 20 }),
+          createTask('m1', '设计组件通信方案', 'feynman', 3, { estimatedXP: 20 }),
+        ],
+      },
+      {
+        id: 'm2',
+        title: '性能优化专项',
+        focus: '全链路性能瓶颈分析与调优',
+        status: 'locked',
+        requiredXP: 2500,
+        reinforcementLevel: 0,
+        isReinforcing: false,
+        tasks: [
+          createTask('m2', '定位首屏性能瓶颈并输出诊断报告', 'concept', 1, { estimatedXP: 25 }),
+          createTask('m2', '完成关键页面懒加载与缓存策略改造', 'project', 2, { estimatedXP: 30 }),
+          createTask('m2', '解决 3 个典型性能优化面试题', 'leetcode', 3, { estimatedXP: 25 }),
+        ],
+      },
+      {
+        id: 'm3',
+        title: '工程化体系建设',
+        focus: 'CI/CD 流水线与自动化测试',
+        status: 'locked',
+        requiredXP: 3000,
+        reinforcementLevel: 0,
+        isReinforcing: false,
+        tasks: [
+          createTask('m3', '搭建最小可用 CI Pipeline', 'project', 1, { estimatedXP: 30 }),
+          createTask('m3', '为关键模块补齐单元测试与覆盖率门槛', 'concept', 2, { estimatedXP: 25 }),
+          createTask('m3', '完成 3 道与测试设计相关题目', 'leetcode', 3, { estimatedXP: 25 }),
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      id: 's1',
+      title: '系统架构演进',
+      focus: '从单体到微服务的分布式决策',
+      status: 'current',
+      requiredXP: 5000,
+      reinforcementLevel: 0,
+      isReinforcing: false,
+      tasks: [
+        createTask('s1', '梳理服务拆分边界与数据一致性权衡', 'concept', 1, { estimatedXP: 30 }),
+        createTask('s1', '完成一次故障降级策略演练', 'project', 2, { estimatedXP: 35 }),
+        createTask('s1', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
+      ],
+    },
+    {
+      id: 's2',
+      title: '技术选型方法论',
+      focus: '复杂业务场景下的技术栈评估',
+      status: 'locked',
+      requiredXP: 6000,
+      reinforcementLevel: 0,
+      isReinforcing: false,
+      tasks: [
+        createTask('s2', '建立选型评估矩阵并对比三套方案', 'concept', 1, { estimatedXP: 30 }),
+        createTask('s2', '输出带成本估算的技术决策记录', 'project', 2, { estimatedXP: 35 }),
+        createTask('s2', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
+      ],
+    },
+    {
+      id: 's3',
+      title: '团队技术领导力',
+      focus: '技术架构委员会与标准制定',
+      status: 'locked',
+      requiredXP: 8000,
+      reinforcementLevel: 0,
+      isReinforcing: false,
+      tasks: [
+        createTask('s3', '制定跨团队代码评审标准与准入规范', 'concept', 1, { estimatedXP: 30 }),
+        createTask('s3', '组织一次架构评审并沉淀决策文档', 'project', 2, { estimatedXP: 35 }),
+        createTask('s3', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
+      ],
+    },
+  ];
+};
 
 const extractAIMappedTasks = (
   payload: unknown,
@@ -318,7 +593,7 @@ interface GameState {
   addExp: (amount: number) => void;
   fetchUserData: () => Promise<void>;
   setSkillPoints: (skillPoints: number) => void;
-  setTargetLevel: (direction: string, level: TargetLevel) => void;
+  setTargetLevel: (direction: string, level: TargetLevel) => Promise<void>;
   setActiveRoadmapNode: (nodeId: string) => void;
   completeGapNode: (nodeId: string) => void;
   trackProgress: (skillId: string, xpGained: number, isfinished?: boolean) => Promise<void>;
@@ -490,105 +765,65 @@ export const useGameStore = create<GameState>((set, get) => ({
   setSkillPoints: (skillPoints) => set({ skillPoints }),
 
   // 核心重构：双重定锚方法 (PRD 3.1)
-  setTargetLevel: (direction, level) => {
-    let mockRoadmap: RoadmapNode[] = [];
-    let mockGapNodes: string[] = [];
+  setTargetLevel: async (direction, level) => {
+    set({ isSyncing: true });
 
-    // 根据不同段位生成路线图 (PRD Mock 逻辑)
-    if (level === 'Junior') {
-      mockRoadmap = [
-        { 
-          id: 'j1', title: '核心基础构建', focus: '掌握语言底层原理与核心语法', status: 'current', requiredXP: 500,
-          reinforcementLevel: 0,
-          isReinforcing: false,
-          tasks: [
-            createTask('j1', '阅读核心语法文档', 'concept', 1, { estimatedXP: 15 }),
-            createTask('j1', '手写实现基础算法', 'leetcode', 2, { referenceId: 'leetcode-001', estimatedXP: 20 }),
-            createTask('j1', '完成 5 道基础练习题', 'project', 3, { estimatedXP: 25 }),
-          ]
-        },
-        { 
-          id: 'j2', title: '版本控制专家', focus: 'Git 协同开发与分流策略', status: 'locked', requiredXP: 800,
-          reinforcementLevel: 0,
-          isReinforcing: false,
-          tasks: [
-            createTask('j2', '执行一次 Rebase', 'concept', 1, { estimatedXP: 15 }),
-            createTask('j2', '解决合并冲突', 'project', 2, { estimatedXP: 20 }),
-            createTask('j2', '配置 Git Hooks', 'concept', 3, { estimatedXP: 15 }),
-          ]
-        },
-        { 
-          id: 'j3', title: '初级实战工程', focus: '独立完成模块化组件开发', status: 'locked', requiredXP: 1200,
-          reinforcementLevel: 0,
-          isReinforcing: false,
-          tasks: [
-            createTask('j3', '封装 Button 组件', 'project', 1, { estimatedXP: 20 }),
-            createTask('j3', '实现 Todo List', 'project', 2, { estimatedXP: 25 }),
-            createTask('j3', '学习 CSS Modules', 'concept', 3, { estimatedXP: 15 }),
-          ]
-        },
-      ];
-      mockGapNodes = ['base_syntax', 'git_flow', 'component_logic'];
-    } else if (level === 'Mid') {
-      mockRoadmap = [
-        { 
-          id: 'm1', title: '架构模式实践', focus: '深入理解 MVC/MVVM 与设计模式', status: 'current', requiredXP: 2000,
-          reinforcementLevel: 0,
-          isReinforcing: false,
-          tasks: [
-            createTask('m1', '重构旧模块逻辑', 'project', 1, { estimatedXP: 30 }),
-            createTask('m1', '接入状态管理', 'concept', 2, { estimatedXP: 20 }),
-            createTask('m1', '设计组件通信方案', 'feynman', 3, { estimatedXP: 20 }),
-          ]
-        },
-        { id: 'm2', title: '性能优化专项', focus: '全链路性能瓶颈分析与调优', status: 'locked', requiredXP: 2500, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
-        { id: 'm3', title: '工程化体系建设', focus: 'CI/CD 流水线与自动化测试', status: 'locked', requiredXP: 3000, reinforcementLevel: 0, isReinforcing: false, tasks: [] },
-      ];
-      mockGapNodes = ['design_patterns', 'perf_optimization', 'ci_cd'];
-    } else {
-      mockRoadmap = [
-        {
-          id: 's1', title: '系统架构演进', focus: '从单体到微服务的分布式决策', status: 'current', requiredXP: 5000,
-          reinforcementLevel: 0,
-          isReinforcing: false,
-          tasks: [
-            createTask('s1', '梳理服务拆分边界与数据一致性权衡', 'concept', 1, { estimatedXP: 30 }),
-            createTask('s1', '完成一次故障降级策略演练', 'project', 2, { estimatedXP: 35 }),
-            createTask('s1', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
-          ]
-        },
-        {
-          id: 's2', title: '技术选型方法论', focus: '复杂业务场景下的技术栈评估', status: 'locked', requiredXP: 6000,
-          reinforcementLevel: 0,
-          isReinforcing: false,
-          tasks: [
-            createTask('s2', '建立选型评估矩阵并对比三套方案', 'concept', 1, { estimatedXP: 30 }),
-            createTask('s2', '输出带成本估算的技术决策记录', 'project', 2, { estimatedXP: 35 }),
-            createTask('s2', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
-          ]
-        },
-        {
-          id: 's3', title: '团队技术领导力', focus: '技术架构委员会与标准制定', status: 'locked', requiredXP: 8000,
-          reinforcementLevel: 0,
-          isReinforcing: false,
-          tasks: [
-            createTask('s3', '制定跨团队代码评审标准与准入规范', 'concept', 1, { estimatedXP: 30 }),
-            createTask('s3', '组织一次架构评审并沉淀决策文档', 'project', 2, { estimatedXP: 35 }),
-            createTask('s3', '向 AI 解释此核心原理，并接受逻辑评估', 'feynman', 3, { estimatedXP: 35 }),
-          ]
-        },
-      ];
-      mockGapNodes = ['dist_systems', 'tech_strategy', 'leadership'];
+    const loadingToastId = toast.loading('AI 正在生成你的专属学习路线...');
+
+    try {
+      const prompt = generateNodePrompt({
+        mode: 'roadmap',
+        careerDirection: direction,
+        targetLevel: level,
+      });
+      const aiResponse = await requestAI(prompt.systemPrompt, prompt.userPrompt);
+      const nextRoadmap = extractAIRoadmapNodes(aiResponse, level).slice(0, 4);
+
+      if (nextRoadmap.length < 3) {
+        throw new Error('AI did not return enough roadmap nodes.');
+      }
+
+      const nextGapNodes = nextRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
+
+      set({
+        careerDirection: direction,
+        userTargetLevel: level,
+        isOnboarded: true,
+        dynamicRoadmap: nextRoadmap,
+        gapNodes: nextGapNodes,
+        activeRoadmapNodeId: nextRoadmap[0]?.id || null,
+      });
+
+      const currentUser = get().currentUser;
+
+      if (currentUser) {
+        await syncRoadmapToSupabase(currentUser.id, nextRoadmap);
+      }
+
+      toast.success('AI 路线图生成完成。', { id: loadingToastId });
+    } catch (error) {
+      const safeHarborRoadmap = buildSafeHarborRoadmap(level);
+      const safeHarborGapNodes = safeHarborRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
+
+      set({
+        careerDirection: direction,
+        userTargetLevel: level,
+        isOnboarded: true,
+        dynamicRoadmap: safeHarborRoadmap,
+        gapNodes: safeHarborGapNodes,
+        activeRoadmapNodeId: safeHarborRoadmap[0]?.id || null,
+      });
+
+      const currentUser = get().currentUser;
+      if (currentUser) {
+        await syncRoadmapToSupabase(currentUser.id, safeHarborRoadmap);
+      }
+
+      toast.warning('AI 核心正在冷却，已为你加载职业专家预设路径。', { id: loadingToastId });
+      console.error('[useGameStore:setTargetLevel] Failed to generate roadmap:', error);
+    } finally {
+      set({ isSyncing: false });
     }
-
-    set({
-      careerDirection: direction,
-      userTargetLevel: level,
-      isOnboarded: true,
-      dynamicRoadmap: mockRoadmap,
-      gapNodes: mockGapNodes,
-      activeRoadmapNodeId: mockRoadmap[0]?.id || null
-    });
   },
 
   // 切换激活节点
