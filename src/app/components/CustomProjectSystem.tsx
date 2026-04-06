@@ -22,7 +22,7 @@ export default function CustomProjectSystem({
 
   if (!activeNode) {
     return (
-      <Card className="p-10 text-center bg-slate-900/60 border border-slate-700">
+      <Card className="p-5 text-center bg-slate-900/60 border border-slate-700">
         <Lightbulb className="w-12 h-12 mx-auto mb-6 text-slate-400" />
         <h3 className="text-xl font-semibold text-slate-200 mb-2">实战项目推荐待生成</h3>
         <p className="text-slate-400">请选择路线图中的节点以获取个性化项目建议</p>
@@ -51,7 +51,7 @@ export default function CustomProjectSystem({
       <p className="text-slate-300 leading-relaxed mb-6">{recommendedProject}</p>
 
       <div className="flex items-center gap-2 text-xs text-orange-400 border-t border-orange-400/30 pt-4">
-        <ArrowRight className="w-4 h-4" />
+        <ArrowRight className="w-4 h-4 shrink-0" />
         完成该项目可显著提升对应节点熟练度，并获得大量经验值
       </div>
     </Card>

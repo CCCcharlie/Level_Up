@@ -30,10 +30,10 @@ export default function App() {
     careerDirection, 
     userTargetLevel 
   } = useGameStore();
-
+;
   useEffect(() => {
     void fetchUserData();
-  }, [fetchUserData]);
+  }, [])
 
   if (isSyncing) {
     return (
@@ -123,9 +123,9 @@ export default function App() {
             </div>
           </SidebarHeader>
 
-          <SidebarContent>
-            <ScrollArea className="h-full px-4 py-6">
-              <div className="space-y-8 pb-10">
+          <SidebarContent className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <ScrollArea className="flex-1 h-full w-full px-2 py-4">
+              <div className="space-y-4 pb-24">
                 {/* 模块间增加间距与阴影区分 */}
                 <section className="bg-slate-900/30 rounded-xl p-1 border border-transparent hover:border-slate-800 transition-colors shadow-2xl shadow-black/20">
                   <EnhancedTaskCenter />

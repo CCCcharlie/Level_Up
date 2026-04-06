@@ -369,6 +369,33 @@ export const buildReinforcePrompt = (
   }),
 });
 
+export interface ExtensionHistoryTask {
+  title: string;
+  type: string;
+  currentXp?: number;
+  lastActive?: string | null;
+}
+
+export const buildExtensionPrompt = (
+  historyTasks: ExtensionHistoryTask[],
+  weakPoints: string[]
+) => ({
+  systemPrompt: [
+    ROADMAP_PROMPT,
+    BASE_JSON_CONTRACT,
+    '你是“JIT 进阶路线生成器”。用户已完成基础节点，需要你生成个性化进阶挑战。',
+    '必须输出 2 个 RoadmapNode，每个节点 3 个任务，任务类型应覆盖 concept/project/leetcode 并可加入 feynman。',
+    '必须围绕用户薄弱点补强，同时保持挑战性和可执行性。',
+    '节点状态统一设为 locked。',
+  ].join('\n'),
+  userPrompt: [
+    '用户已完成基础节点，请根据其耗时和弱点，生成 2 个定制化的进阶 RoadmapNode。',
+    `已完成任务样本（含进度信息）：${JSON.stringify(historyTasks, null, 2)}`,
+    `薄弱点：${JSON.stringify(weakPoints, null, 2)}`,
+    '输出 JSON：{"nodes":[{"title":"string","focus":"string","requiredXP":number,"tasks":[{"title":"string","type":"concept|project|leetcode|feynman","estimatedXP":number}]}]}',
+  ].join('\n'),
+});
+
 export async function requestAI(systemPrompt: string, userPrompt: string): Promise<unknown> {
   const providers: Array<{
     name: string;

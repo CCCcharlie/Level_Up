@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { toast } from 'sonner';
-import { generateNodePrompt, normalizeTaskType, requestAI } from '../lib/aiService.ts';
+import { buildExtensionPrompt, generateNodePrompt, normalizeTaskType, requestAI } from '../lib/aiService.ts';
+import { INITIAL_ROADMAPS } from '../data/roadmapTemplates';
 import { supabase } from '../lib/supabase';
 import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
 
@@ -172,6 +173,74 @@ const serializeRoadmapNodes = (nodes: RoadmapNode[]) =>
     ...node,
     tasks: node.tasks.map((task) => ({ ...task })),
   }));
+
+const cloneTaskTree = (task: Task): Task => ({
+  ...task,
+  subTasks: task.subTasks?.map((subTask) => cloneTaskTree(subTask)),
+});
+
+const cloneRoadmapSeed = (level: TargetLevel): RoadmapNode[] =>
+  INITIAL_ROADMAPS[level].map((node) => ({
+    ...node,
+    tasks: node.tasks.map((task) => cloneTaskTree(task)),
+  }));
+
+const flattenTaskTree = (task: Task): Task[] => [
+  task,
+  ...(task.subTasks?.flatMap((subTask) => flattenTaskTree(subTask)) ?? []),
+];
+
+const flattenRoadmapTasks = (roadmap: RoadmapNode[]): Task[] =>
+  roadmap.flatMap((node) => node.tasks.flatMap((task) => flattenTaskTree(task)));
+
+const mapTasksById = (roadmap: RoadmapNode[]): Record<string, Task> =>
+  flattenRoadmapTasks(roadmap).reduce<Record<string, Task>>((accumulator, task) => {
+    accumulator[task.id] = task;
+    return accumulator;
+  }, {});
+
+const createUniqueNodeId = (baseId: string, existingIds: Set<string>, indexHint: number) => {
+  let candidate = `${baseId}-jit-${indexHint + 1}`;
+  let suffix = 1;
+
+  while (existingIds.has(candidate)) {
+    candidate = `${baseId}-jit-${indexHint + 1}-${suffix}`;
+    suffix += 1;
+  }
+
+  existingIds.add(candidate);
+  return candidate;
+};
+
+const normalizeExtensionNodes = (
+  nodes: RoadmapNode[],
+  existingRoadmap: RoadmapNode[]
+): RoadmapNode[] => {
+  const existingIds = new Set(existingRoadmap.map((node) => node.id));
+
+  return nodes.map((node, nodeIndex) => {
+    const nextNodeId = createUniqueNodeId(slugify(node.title) || node.id, existingIds, nodeIndex);
+
+    const nextTasks = node.tasks.map((task, taskIndex) => ({
+      ...task,
+      id: createTaskId(nextNodeId, task.title, taskIndex + 1),
+      referenceId: nextNodeId,
+      subTasks: task.subTasks?.map((subTask, subTaskIndex) => ({
+        ...subTask,
+        id: createTaskId(`${nextNodeId}-${taskIndex + 1}`, subTask.title, subTaskIndex + 1),
+      })),
+    }));
+
+    return {
+      ...node,
+      id: nextNodeId,
+      status: 'locked',
+      reinforcementLevel: 0,
+      isReinforcing: false,
+      tasks: nextTasks,
+    };
+  });
+};
 
 const BREAKDOWN_TASK_TYPES: TaskType[] = ['concept', 'project', 'leetcode'];
 const ROADMAP_TASK_TYPES: TaskType[] = ['concept', 'project', 'leetcode', 'feynman'];
@@ -574,6 +643,7 @@ interface GameState {
   isOnboarded: boolean;
   currentUser: CurrentUser | null;
   isSyncing: boolean;
+  isExtending: boolean;
 
   // 2. 核心进度与经验值 (PRD 3.3)
   totalExp: number;
@@ -593,7 +663,8 @@ interface GameState {
   addExp: (amount: number) => void;
   fetchUserData: () => Promise<void>;
   setSkillPoints: (skillPoints: number) => void;
-  setTargetLevel: (direction: string, level: TargetLevel) => Promise<void>;
+  setTargetLevel: (direction: string, level: TargetLevel) => void;
+  extendRoadmapWithAI: () => Promise<void>;
   setActiveRoadmapNode: (nodeId: string) => void;
   completeGapNode: (nodeId: string) => void;
   trackProgress: (skillId: string, xpGained: number, isfinished?: boolean) => Promise<void>;
@@ -613,6 +684,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   isOnboarded: false,
   currentUser: null,
   isSyncing: false,
+  isExtending: false,
   totalExp: 3250,
   level: 8,
   skillPoints: 15,
@@ -765,64 +837,90 @@ export const useGameStore = create<GameState>((set, get) => ({
   setSkillPoints: (skillPoints) => set({ skillPoints }),
 
   // 核心重构：双重定锚方法 (PRD 3.1)
-  setTargetLevel: async (direction, level) => {
-    set({ isSyncing: true });
+  setTargetLevel: (direction, level) => {
+    const nextRoadmap = cloneRoadmapSeed(level);
+    const nextGapNodes = nextRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
 
-    const loadingToastId = toast.loading('AI 正在生成你的专属学习路线...');
+    set({
+      careerDirection: direction,
+      userTargetLevel: level,
+      isOnboarded: true,
+      dynamicRoadmap: nextRoadmap,
+      gapNodes: nextGapNodes,
+      activeRoadmapNodeId: nextRoadmap[0]?.id || null,
+      isSyncing: false,
+    });
+
+    const currentUser = get().currentUser;
+    if (currentUser) {
+      void syncRoadmapToSupabase(currentUser.id, nextRoadmap);
+    }
+  },
+
+  extendRoadmapWithAI: async () => {
+    const currentState = get();
+
+    if (currentState.isExtending || currentState.dynamicRoadmap.length === 0) {
+      return;
+    }
+
+    set({ isExtending: true });
 
     try {
-      const prompt = generateNodePrompt({
-        mode: 'roadmap',
-        careerDirection: direction,
-        targetLevel: level,
-      });
-      const aiResponse = await requestAI(prompt.systemPrompt, prompt.userPrompt);
-      const nextRoadmap = extractAIRoadmapNodes(aiResponse, level).slice(0, 4);
+      const taskMap = mapTasksById(currentState.dynamicRoadmap);
+      const completedHistoryTasks = Object.entries(currentState.skillProgress).reduce<
+        Array<{ title: string; type: TaskType; currentXp: number; lastActive: string | null }>
+      >((accumulator, [taskId, entry]) => {
+        if (!entry.isFinished) {
+          return accumulator;
+        }
 
-      if (nextRoadmap.length < 3) {
-        throw new Error('AI did not return enough roadmap nodes.');
+        const task = taskMap[taskId];
+        if (!task) {
+          return accumulator;
+        }
+
+        accumulator.push({
+          title: task.title,
+          type: task.type,
+          currentXp: entry.currentXp,
+          lastActive: entry.lastActive,
+        });
+
+        return accumulator;
+      }, []);
+
+      if (completedHistoryTasks.length === 0) {
+        return;
       }
 
-      const nextGapNodes = nextRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
+      const weakPoints = currentState.gapNodes
+        .map((taskId) => taskMap[taskId]?.title)
+        .filter((title): title is string => Boolean(title))
+        .slice(0, 8);
 
-      set({
-        careerDirection: direction,
-        userTargetLevel: level,
-        isOnboarded: true,
-        dynamicRoadmap: nextRoadmap,
-        gapNodes: nextGapNodes,
-        activeRoadmapNodeId: nextRoadmap[0]?.id || null,
-      });
+      const prompt = buildExtensionPrompt(completedHistoryTasks, weakPoints);
+      const aiResponse = await requestAI(prompt.systemPrompt, prompt.userPrompt);
+      const generatedNodes = extractAIRoadmapNodes(aiResponse, currentState.userTargetLevel).slice(0, 2);
+
+      if (generatedNodes.length === 0) {
+        throw new Error('AI did not return extension roadmap nodes.');
+      }
+
+      const currentRoadmap = get().dynamicRoadmap;
+      const normalizedExtensionNodes = normalizeExtensionNodes(generatedNodes, currentRoadmap);
+      const nextRoadmap = [...currentRoadmap, ...normalizedExtensionNodes];
+
+      set({ dynamicRoadmap: nextRoadmap });
 
       const currentUser = get().currentUser;
-
       if (currentUser) {
         await syncRoadmapToSupabase(currentUser.id, nextRoadmap);
       }
-
-      toast.success('AI 路线图生成完成。', { id: loadingToastId });
     } catch (error) {
-      const safeHarborRoadmap = buildSafeHarborRoadmap(level);
-      const safeHarborGapNodes = safeHarborRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
-
-      set({
-        careerDirection: direction,
-        userTargetLevel: level,
-        isOnboarded: true,
-        dynamicRoadmap: safeHarborRoadmap,
-        gapNodes: safeHarborGapNodes,
-        activeRoadmapNodeId: safeHarborRoadmap[0]?.id || null,
-      });
-
-      const currentUser = get().currentUser;
-      if (currentUser) {
-        await syncRoadmapToSupabase(currentUser.id, safeHarborRoadmap);
-      }
-
-      toast.warning('AI 核心正在冷却，已为你加载职业专家预设路径。', { id: loadingToastId });
-      console.error('[useGameStore:setTargetLevel] Failed to generate roadmap:', error);
+      console.error('[useGameStore:extendRoadmapWithAI] Failed to extend roadmap:', error);
     } finally {
-      set({ isSyncing: false });
+      set({ isExtending: false });
     }
   },
 
@@ -1020,6 +1118,19 @@ export const useGameStore = create<GameState>((set, get) => ({
           ? state.gapNodes
           : [...state.gapNodes, skillId],
     }));
+
+    const postUpdateState = get();
+    const allTasks = flattenRoadmapTasks(postUpdateState.dynamicRoadmap);
+    const totalTaskCount = allTasks.length;
+    const completedTaskCount = allTasks.reduce(
+      (count, task) => (postUpdateState.skillProgress[task.id]?.isFinished ? count + 1 : count),
+      0
+    );
+    const completionRate = totalTaskCount > 0 ? completedTaskCount / totalTaskCount : 0;
+
+    if (completionRate > 0.7 && !postUpdateState.isExtending) {
+      void postUpdateState.extendRoadmapWithAI();
+    }
 
     const currentUser = get().currentUser;
 
