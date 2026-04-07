@@ -1,7 +1,7 @@
 'use client';
 
 import { animate, motion, useMotionValue } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
 import { type Task, useGameStore } from '../../store/useGameStore';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
@@ -11,6 +11,15 @@ import { Target, Flame, CheckCircle, Rocket, Sparkles, Orbit, FlameKindling, Bra
 type Point = {
   x: number;
   y: number;
+};
+
+const MIN_SCALE = 0.3;
+const MAX_SCALE = 2.5;
+const SOFT_DRAG_CONSTRAINTS = {
+  left: -5000,
+  right: 5000,
+  top: -5000,
+  bottom: 5000,
 };
 
 const getNodeTone = (nodeStatus: string, isActiveNode: boolean) => {
@@ -56,8 +65,11 @@ const LearningPathFlow = () => {
   } = useGameStore();
 
   const [branchParentNodeId, setBranchParentNodeId] = useState<string | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const lastSafeOffsetRef = useRef<Point>({ x: 0, y: 0 });
   const x = useMotionValue(0);
   const y = useMotionValue(0);
+  const scale = useMotionValue(1);
 
   const roadmapLayout = useMemo(() => {
     const nodeSpacingX = 560;
@@ -127,8 +139,17 @@ const LearningPathFlow = () => {
       return;
     }
 
-    const targetX = window.innerWidth / 2 - activeNode.x;
-    const targetY = window.innerHeight / 2 - activeNode.y;
+    const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth;
+    const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight;
+    const currentScale = scale.get();
+    const targetX = viewportWidth / 2 - activeNode.x * currentScale;
+    const targetY = viewportHeight / 2 - activeNode.y * currentScale;
+
+    if (!Number.isFinite(targetX) || !Number.isFinite(targetY)) {
+      return;
+    }
+
+    lastSafeOffsetRef.current = { x: targetX, y: targetY };
 
     const controlsX = animate(x, targetX, { type: 'spring', damping: 25, stiffness: 80 });
     const controlsY = animate(y, targetY, { type: 'spring', damping: 25, stiffness: 80 });
@@ -137,7 +158,49 @@ const LearningPathFlow = () => {
       controlsX.stop();
       controlsY.stop();
     };
-  }, [activeNodeIndex, roadmapLayout, x, y]);
+  }, [activeNodeIndex, roadmapLayout, scale, x, y]);
+
+  const handleViewportWheel = (event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    const cursorX = event.clientX - rect.left;
+    const cursorY = event.clientY - rect.top;
+    const prevScale = scale.get();
+    const delta = -event.deltaY * 0.0015;
+    const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * (1 + delta)));
+
+    if (!Number.isFinite(nextScale) || nextScale === prevScale) {
+      return;
+    }
+
+    const ratio = nextScale / prevScale;
+    const currentX = x.get();
+    const currentY = y.get();
+    const nextX = cursorX - (cursorX - currentX) * ratio;
+    const nextY = cursorY - (cursorY - currentY) * ratio;
+
+    if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+      return;
+    }
+
+    const controlsX = animate(x, nextX, { type: 'spring', damping: 32, stiffness: 280, mass: 0.35 });
+    const controlsY = animate(y, nextY, { type: 'spring', damping: 32, stiffness: 280, mass: 0.35 });
+    const controlsScale = animate(scale, nextScale, { type: 'spring', damping: 30, stiffness: 260, mass: 0.35 });
+
+    lastSafeOffsetRef.current = { x: nextX, y: nextY };
+
+    window.setTimeout(() => {
+      controlsX.stop();
+      controlsY.stop();
+      controlsScale.stop();
+    }, 220);
+  };
 
   if (!dynamicRoadmap || dynamicRoadmap.length === 0) {
     return (
@@ -170,7 +233,11 @@ const LearningPathFlow = () => {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden select-none bg-[#050814] text-white">
+    <div
+      ref={viewportRef}
+      onWheel={handleViewportWheel}
+      className="relative h-full w-full overflow-hidden select-none bg-[#050814] text-white"
+    >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(168,85,247,0.2),transparent_26%),radial-gradient(circle_at_82%_20%,rgba(59,130,246,0.14),transparent_24%),radial-gradient(circle_at_50%_78%,rgba(16,185,129,0.08),transparent_22%)]" />
       <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(148,163,184,0.11)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.11)_1px,transparent_1px)] [background-size:104px_104px]" />
 
@@ -183,10 +250,25 @@ const LearningPathFlow = () => {
 
       <motion.div
         drag
+        dragConstraints={SOFT_DRAG_CONSTRAINTS}
+        dragElastic={0.2}
+        dragMomentum={false}
+        onDragEnd={() => {
+          const currentX = x.get();
+          const currentY = y.get();
+          if (Number.isFinite(currentX) && Number.isFinite(currentY)) {
+            lastSafeOffsetRef.current = { x: currentX, y: currentY };
+            return;
+          }
+          x.set(lastSafeOffsetRef.current.x);
+          y.set(lastSafeOffsetRef.current.y);
+        }}
         className="absolute left-0 top-0 cursor-grab active:cursor-grabbing"
         style={{
           x,
           y,
+          scale,
+          transformOrigin: '0 0',
           width: roadmapLayout.canvasWidth,
           height: roadmapLayout.canvasHeight,
         }}
@@ -254,7 +336,7 @@ const LearningPathFlow = () => {
           const isActiveNode = node.id === activeRoadmapNodeId;
           const tone = getNodeTone(node.status, isActiveNode);
           const isCurrentStatus = node.status === 'current';
-          const canExploreBranch = (node.status === 'current' || node.status === 'completed') && !node.hasBranched;
+          const canExploreBranch = (isActiveNode || node.status === 'completed') && !node.hasBranched;
           const isGeneratingBranch = branchingNodeId === node.id;
 
           return (
@@ -270,7 +352,15 @@ const LearningPathFlow = () => {
             >
               <button
                 type="button"
-                onClick={() => setActiveRoadmapNode(node.id)}
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setActiveRoadmapNode(node.id);
+                }}
                 className="w-full text-left"
               >
                 <Card
@@ -335,7 +425,8 @@ const LearningPathFlow = () => {
                       type="button"
                       size="sm"
                       onMouseDown={(event) => event.stopPropagation()}
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setBranchParentNodeId(node.id);
                         void generateBranchSuggestions(node.id);
                       }}

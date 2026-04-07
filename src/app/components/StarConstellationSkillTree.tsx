@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type WheelEvent } from 'react';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { useGameStore } from '../../store/useGameStore';
 import { cn } from './ui/utils';
 import { Star, Sparkles, Lock, CheckCircle2, Zap, Code, Shield } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { animate, motion, AnimatePresence, useMotionValue } from 'motion/react';
 import { toast } from 'sonner';
 
 // --- 接口定义 ---
@@ -23,6 +23,15 @@ interface Skill {
   radius: number;
 }
 
+const MIN_SCALE = 0.3;
+const MAX_SCALE = 2.5;
+const SOFT_DRAG_CONSTRAINTS = {
+  left: -5000,
+  right: 5000,
+  top: -5000,
+  bottom: 5000,
+};
+
 
 // 现在 Props 变为空，因为数据全部来自 Store
 export function StarConstellationSkillTree() {
@@ -38,6 +47,10 @@ export function StarConstellationSkillTree() {
   const [hoveredSkill, setHoveredSkill] = useState<string | null>(null);
   const [nebulaBursts, setNebulaBursts] = useState<Array<{ id: string; x: number; y: number; key: number }>>([]);
   const previousGapNodesRef = useRef<string[]>(gapNodes);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const scale = useMotionValue(1);
 
   // 初始化技能数据（实际开发中建议也移入 Store 以便持久化）
   const [skills, setSkills] = useState<Skill[]>([
@@ -51,6 +64,8 @@ export function StarConstellationSkillTree() {
 
   const centerX = 400;
   const centerY = 400;
+  const canvasWidth = 920;
+  const canvasHeight = 920;
   const ringRadii = [0, 120, 220, 320];
 
   const getPosition = useMemo(() => {
@@ -107,6 +122,53 @@ export function StarConstellationSkillTree() {
     previousGapNodesRef.current = gapNodes;
   }, [gapNodes, getPosition, skills]);
 
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const targetX = viewport.clientWidth / 2 - centerX;
+    const targetY = viewport.clientHeight / 2 - centerY;
+
+    x.set(targetX);
+    y.set(targetY);
+  }, [centerX, centerY, x, y]);
+
+  const handleViewportWheel = (event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    const cursorX = event.clientX - rect.left;
+    const cursorY = event.clientY - rect.top;
+    const prevScale = scale.get();
+    const delta = -event.deltaY * 0.0015;
+    const nextScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prevScale * (1 + delta)));
+
+    if (!Number.isFinite(nextScale) || nextScale === prevScale) {
+      return;
+    }
+
+    const ratio = nextScale / prevScale;
+    const currentX = x.get();
+    const currentY = y.get();
+    const nextX = cursorX - (cursorX - currentX) * ratio;
+    const nextY = cursorY - (cursorY - currentY) * ratio;
+
+    if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+      return;
+    }
+
+    animate(x, nextX, { type: 'spring', damping: 32, stiffness: 280, mass: 0.35 });
+    animate(y, nextY, { type: 'spring', damping: 32, stiffness: 280, mass: 0.35 });
+    animate(scale, nextScale, { type: 'spring', damping: 30, stiffness: 260, mass: 0.35 });
+  };
+
   // 升级逻辑
   const levelUpSkill = (skillId: string) => {
     const skill = skills.find(s => s.id === skillId);
@@ -138,7 +200,11 @@ export function StarConstellationSkillTree() {
   };
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#050814] text-white">
+    <div
+      ref={viewportRef}
+      onWheel={handleViewportWheel}
+      className="relative h-full w-full overflow-hidden bg-[#050814] text-white"
+    >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.16),transparent_30%),radial-gradient(circle_at_80%_25%,rgba(168,85,247,0.18),transparent_26%),radial-gradient(circle_at_50%_80%,rgba(14,165,233,0.08),transparent_24%)]" />
       <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(148,163,184,0.10)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.10)_1px,transparent_1px)] [background-size:96px_96px]" />
 
@@ -149,8 +215,22 @@ export function StarConstellationSkillTree() {
         </div>
       </div>
 
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative h-full w-full max-w-[920px] max-h-[920px] scale-90 lg:scale-100">
+      <motion.div
+        drag
+        dragConstraints={SOFT_DRAG_CONSTRAINTS}
+        dragElastic={0.2}
+        dragMomentum={false}
+        className="absolute left-0 top-0 cursor-grab active:cursor-grabbing"
+        style={{
+          x,
+          y,
+          scale,
+          transformOrigin: '0 0',
+          width: canvasWidth,
+          height: canvasHeight,
+        }}
+      >
+        <div className="relative h-full w-full">
           {[1, 2, 3].map((ring) => (
             <div
               key={ring}
@@ -221,7 +301,14 @@ export function StarConstellationSkillTree() {
                 initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: skill.radius * 0.05 }}
-                onClick={() => setSelectedSkill(skill)}
+                onPointerDown={(event) => {
+                  // Prevent node interactions from mutating outer canvas gesture state.
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelectedSkill(skill);
+                }}
                 onMouseEnter={() => setHoveredSkill(skill.id)}
                 onMouseLeave={() => setHoveredSkill(null)}
               >
@@ -281,7 +368,7 @@ export function StarConstellationSkillTree() {
             );
           })}
         </div>
-      </div>
+      </motion.div>
 
       <AnimatePresence>
         {selectedSkill && (
@@ -290,6 +377,7 @@ export function StarConstellationSkillTree() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             className="absolute bottom-6 left-1/2 z-40 w-[min(92vw,920px)] -translate-x-1/2"
+            onPointerDown={(event) => event.stopPropagation()}
           >
             <Card className="border border-purple-500/40 bg-slate-950/85 shadow-[0_0_50px_rgba(168,85,247,0.15)] backdrop-blur-xl">
               <CardContent className="p-6">
@@ -327,7 +415,10 @@ export function StarConstellationSkillTree() {
                     {/* 操作按钮组 */}
                     <div className="flex gap-3">
                       <Button
-                        onClick={() => levelUpSkill(selectedSkill.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          levelUpSkill(selectedSkill.id);
+                        }}
                         disabled={!selectedSkill.unlocked || selectedSkill.currentLevel >= selectedSkill.maxLevel || skillPoints < selectedSkill.costPerLevel}
                         className="bg-gradient-to-r from-purple-600 to-blue-600 text-white border-0 shadow-lg shadow-purple-500/20 hover:from-purple-700 hover:to-blue-700"
                       >
@@ -336,7 +427,10 @@ export function StarConstellationSkillTree() {
                       </Button>
                       
                       <Button
-                        onClick={() => setSelectedSkill(null)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedSkill(null);
+                        }}
                         variant="outline"
                         className="border-slate-700 text-slate-400 hover:bg-slate-800"
                       >

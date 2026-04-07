@@ -162,7 +162,7 @@ export default function EnhancedTaskCenter({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="h-auto w-full min-w-0 shrink-0 space-y-6">
       <div className="border-b border-slate-700 pb-4">
         <div className="flex items-center gap-3 mb-2">
           <Badge variant="outline" className="border-amber-500/50 text-amber-500 bg-amber-500/5">

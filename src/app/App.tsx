@@ -5,19 +5,18 @@ import  LearningPathFlow  from './components/LearningPathFlow';
 import { StarConstellationSkillTree } from './components/StarConstellationSkillTree';
 import  EnhancedTaskCenter  from './components/EnhancedTaskCenter';
 import  CustomProjectSystem  from './components/CustomProjectSystem';
-import DataDashboard from './components/DataDashboard';
 import EquipmentSystem from './components/EquipmentSystem';
 import { ScrollArea } from './components/ui/scroll-area';
 
 
 // UI Components
 
-import { SidebarProvider, Sidebar, SidebarContent, SidebarTrigger, SidebarHeader } from './components/ui/sidebar';
+import { SidebarProvider, Sidebar, SidebarContent, SidebarTrigger, SidebarHeader, SidebarInset } from './components/ui/sidebar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Progress } from './components/ui/progress';
 import { Card } from './components/ui/card';
 import { Badge } from './components/ui/badge';
-import { Zap, Target, LayoutDashboard, Compass } from 'lucide-react';
+import { Compass } from 'lucide-react';
 
 export default function App() {
   // 从 Store 获取全局状态
@@ -86,15 +85,20 @@ export default function App() {
     return <CareerOnboarding />;
   }
 
-  // 计算当前等级经验百分比 (假设每级 1000 XP)
-  const expPercentage = (totalExp % 1000) / 10;
-
   return (
     <div className="dark relative flex h-screen w-full overflow-hidden bg-slate-950 font-sans text-slate-200 selection:bg-purple-500/30">
       {/* 背景径向渐变 */}
       <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_20%_0%,rgba(76,29,149,0.15)_0%,transparent_50%)]" />
 
-      <SidebarProvider defaultOpen={true}>
+      <SidebarProvider
+        defaultOpen={true}
+        style={
+          {
+            '--sidebar-width': '26rem',
+            '--sidebar-width-icon': '3.5rem',
+          } as React.CSSProperties
+        }
+      >
         {/* 1. 全局侧边栏 (监控与执行区) */}
         <Sidebar className="relative z-10 border-r border-slate-800 bg-slate-900/40 backdrop-blur-xl">
           <SidebarHeader className="p-6 border-b border-slate-800/50">
@@ -123,20 +127,21 @@ export default function App() {
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="flex-1 min-h-0 overflow-hidden flex flex-col">
-            <ScrollArea className="flex-1 h-full w-full px-2 py-4">
-              <div className="space-y-4 pb-24">
+          <SidebarContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <ScrollArea className="h-full flex-1 px-2 py-4 [&>[data-slot=scroll-area-viewport]>div]:!block">
+              <div className="flex flex-col gap-4 pb-24">
                 {/* 模块间增加间距与阴影区分 */}
-                <section className="bg-slate-900/30 rounded-xl p-1 border border-transparent hover:border-slate-800 transition-colors shadow-2xl shadow-black/20">
+                {/*
+                  Root cause: ScrollArea sits inside a flex column; without shrink-0, nested sections can be compressed
+                  when viewport height changes, causing internal panels to look truncated.
+                */}
+                <section className="shrink-0 bg-slate-900/30 rounded-xl p-1 border border-transparent hover:border-slate-800 transition-colors shadow-2xl shadow-black/20">
                   <EnhancedTaskCenter />
                 </section>
-                <section className="bg-slate-900/30 rounded-xl p-1 shadow-2xl shadow-black/20">
+                <section className="shrink-0 bg-slate-900/30 rounded-xl p-1 shadow-2xl shadow-black/20">
                   <CustomProjectSystem />
                 </section>
-                <section className="bg-slate-900/30 rounded-xl p-1 shadow-2xl shadow-black/20">
-                   <DataDashboard />
-                </section>
-                <section className="bg-slate-900/30 rounded-xl p-1 shadow-2xl shadow-black/20">
+                <section className="shrink-0 bg-slate-900/30 rounded-xl p-1 shadow-2xl shadow-black/20">
                   <EquipmentSystem />
                 </section>
               </div>
@@ -145,7 +150,7 @@ export default function App() {
         </Sidebar>
 
         {/* 2. 主舞台 (宏观视图区) */}
-        <main className="relative z-10 flex h-full flex-1 flex-col overflow-hidden">
+        <SidebarInset className="relative z-10 flex h-full min-w-0 w-full flex-1 flex-col overflow-hidden transition-all duration-300 ease-in-out md:peer-data-[state=collapsed]:ml-0 md:peer-data-[state=collapsed]:w-full">
           <header className="h-14 border-b border-slate-800/50 flex items-center px-6 bg-slate-950/50 backdrop-blur-sm z-20">
             <SidebarTrigger className="text-slate-400 hover:text-white transition-colors" />
             <div className="ml-4 h-4 w-px bg-slate-800" />
@@ -172,7 +177,7 @@ export default function App() {
               </Card>
             </Tabs>
           </div>
-        </main>
+        </SidebarInset>
       </SidebarProvider>
     </div>
   );
