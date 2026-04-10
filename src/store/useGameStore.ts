@@ -31,6 +31,7 @@ export interface Task {
  */
 export interface RoadmapNode {
   id: string;
+  parentId?: string | null;
   title: string;       // 对应之前的 label
   focus: string;       // 对应之前的 description
   status: 'locked' | 'current' | 'completed';
@@ -164,6 +165,7 @@ const normalizeRoadmapNodes = (value: unknown): RoadmapNode[] => {
 
       return {
         id: item.id,
+        parentId: typeof item.parentId === 'string' ? item.parentId : null,
         title: item.title,
         focus: item.focus,
         status,
@@ -190,6 +192,7 @@ const cloneTaskTree = (task: Task): Task => ({
 const cloneRoadmapSeed = (level: TargetLevel): RoadmapNode[] =>
   INITIAL_ROADMAPS[level].map((node) => ({
     ...node,
+    parentId: node.parentId ?? null,
     tasks: node.tasks.map((task) => cloneTaskTree(task)),
   }));
 
@@ -242,6 +245,7 @@ const normalizeExtensionNodes = (
     return {
       ...node,
       id: nextNodeId,
+      parentId: null,
       status: 'locked',
       reinforcementLevel: 0,
       isReinforcing: false,
@@ -377,6 +381,7 @@ const extractAIRoadmapNodes = (payload: unknown, level: TargetLevel): RoadmapNod
 
       return {
         id: nodeId,
+        parentId: typeof item.parentId === 'string' ? item.parentId : null,
         title: nodeTitle,
         focus: nodeFocus,
         status: normalizeNodeStatus(item.status, index),
@@ -665,6 +670,7 @@ interface GameState {
   gapNodes: string[];                // 星盘高亮节点 ID
   dynamicRoadmap: RoadmapNode[];     // 动态学习路线
   activeRoadmapNodeId: string | null; // 当前激活的路线节点
+  lastAddedBranchNodeId: string | null;
 
   // 4. 装备系统
   equipment: Equipment[];
@@ -706,6 +712,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   gapNodes: [],
   dynamicRoadmap: [],
   activeRoadmapNodeId: null,
+  lastAddedBranchNodeId: null,
   equipment: [
     {
       id: 'e1', name: '神经连结头盔', type: 'armor', rarity: 'rare', category: '硬件',
@@ -862,6 +869,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       dynamicRoadmap: nextRoadmap,
       gapNodes: nextGapNodes,
       activeRoadmapNodeId: nextRoadmap[0]?.id || null,
+      lastAddedBranchNodeId: null,
       isSyncing: false,
     });
 
@@ -925,7 +933,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       const normalizedExtensionNodes = normalizeExtensionNodes(generatedNodes, currentRoadmap);
       const nextRoadmap = [...currentRoadmap, ...normalizedExtensionNodes];
 
-      set({ dynamicRoadmap: nextRoadmap });
+      set({ dynamicRoadmap: nextRoadmap, lastAddedBranchNodeId: null });
 
       const currentUser = get().currentUser;
       if (currentUser) {
@@ -973,18 +981,23 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   addBranchToRoadmap: async (parentNodeId, chosenNode) => {
     const currentState = get();
-    const parentIndex = currentState.dynamicRoadmap.findIndex((node) => node.id === parentNodeId);
+    const parentNode = currentState.dynamicRoadmap.find((node) => node.id === parentNodeId);
 
-    if (parentIndex < 0) {
+    if (!parentNode) {
       toast.error('未找到可插入分支的父节点。');
       return;
     }
 
     const existingIds = new Set(currentState.dynamicRoadmap.map((node) => node.id));
-    const insertedNodeId = createUniqueNodeId(slugify(chosenNode.title) || chosenNode.id, existingIds, parentIndex + 1);
+    const insertedNodeId = createUniqueNodeId(
+      slugify(chosenNode.title) || chosenNode.id,
+      existingIds,
+      currentState.dynamicRoadmap.length + 1
+    );
     const insertedNode: RoadmapNode = {
       ...chosenNode,
       id: insertedNodeId,
+      parentId: parentNodeId,
       status: 'locked',
       reinforcementLevel: 0,
       isReinforcing: false,
@@ -1000,17 +1013,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       })),
     };
 
-    const nextRoadmap = [...currentState.dynamicRoadmap];
-    nextRoadmap[parentIndex] = {
-      ...nextRoadmap[parentIndex],
-      hasBranched: true,
-    };
-    nextRoadmap.splice(parentIndex + 1, 0, insertedNode);
+    const nextRoadmap = [
+      ...currentState.dynamicRoadmap.map((node) =>
+        node.id === parentNodeId
+          ? {
+              ...node,
+              hasBranched: true,
+            }
+          : node
+      ),
+      insertedNode,
+    ];
 
     set({
       dynamicRoadmap: nextRoadmap,
       branchSuggestions: null,
       branchingNodeId: null,
+      lastAddedBranchNodeId: insertedNodeId,
     });
 
     const currentUser = get().currentUser;
@@ -1280,6 +1299,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     dynamicRoadmap: [], 
     gapNodes: [],
     activeRoadmapNodeId: null,
+    lastAddedBranchNodeId: null,
     branchingNodeId: null,
     branchSuggestions: null,
     currentUser: null,

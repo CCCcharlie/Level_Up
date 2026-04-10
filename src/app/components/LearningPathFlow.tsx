@@ -2,7 +2,7 @@
 
 import { animate, motion, useMotionValue } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
-import { type Task, useGameStore } from '../../store/useGameStore';
+import { type RoadmapNode, type Task, useGameStore } from '../../store/useGameStore';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -13,6 +13,14 @@ type Point = {
   y: number;
 };
 
+type PositionedRoadmapNode = RoadmapNode & Point & { depth: number };
+type RoadmapEdge = {
+  id: string;
+  parentId: string;
+  childId: string;
+  path: string;
+};
+
 const MIN_SCALE = 0.3;
 const MAX_SCALE = 2.5;
 const SOFT_DRAG_CONSTRAINTS = {
@@ -20,6 +28,114 @@ const SOFT_DRAG_CONSTRAINTS = {
   right: 5000,
   top: -5000,
   bottom: 5000,
+};
+
+const ROOT_KEY = '__root__';
+const NODE_SPACING_X = 520;
+const NODE_SPACING_Y = 260;
+const PADDING_X = 280;
+const PADDING_Y = 220;
+
+const buildRoadmapTreeLayout = (roadmap: RoadmapNode[]) => {
+  const indexById = new Map(roadmap.map((node, index) => [node.id, index]));
+  const nodeById = new Map<string, RoadmapNode>(roadmap.map((node) => [node.id, node]));
+  const childrenMap = new Map<string, RoadmapNode[]>();
+
+  childrenMap.set(ROOT_KEY, []);
+
+  roadmap.forEach((node) => {
+    const parentKey = node.parentId && indexById.has(node.parentId) ? node.parentId : ROOT_KEY;
+    const siblings = childrenMap.get(parentKey) ?? [];
+    siblings.push(node);
+    childrenMap.set(parentKey, siblings);
+  });
+
+  childrenMap.forEach((children) => {
+    children.sort((a, b) => (indexById.get(a.id) ?? 0) - (indexById.get(b.id) ?? 0));
+  });
+
+  const positionedById = new Map<string, PositionedRoadmapNode>();
+  let maxDepth = 0;
+
+  const placeSubtree = (nodeId: string, depth: number, rowStart: number): { rowCenter: number; rowEnd: number } => {
+    const node = nodeById.get(nodeId);
+    if (!node) {
+      return { rowCenter: rowStart, rowEnd: rowStart + 1 };
+    }
+
+    const children = childrenMap.get(nodeId) ?? [];
+    let rowCenter = rowStart;
+    let rowCursor = rowStart;
+
+    if (children.length === 0) {
+      rowCursor = rowStart + 1;
+    } else {
+      const centers: number[] = [];
+
+      children.forEach((child) => {
+        const childPlacement = placeSubtree(child.id, depth + 1, rowCursor);
+        centers.push(childPlacement.rowCenter);
+        rowCursor = childPlacement.rowEnd;
+      });
+
+      rowCenter = (centers[0] + centers[centers.length - 1]) / 2;
+    }
+
+    maxDepth = Math.max(maxDepth, depth);
+
+    positionedById.set(node.id, {
+      ...node,
+      depth,
+      x: PADDING_X + depth * NODE_SPACING_X,
+      y: PADDING_Y + rowCenter * NODE_SPACING_Y,
+    });
+
+    return { rowCenter, rowEnd: rowCursor };
+  };
+
+  let usedRows = 0;
+  const roots = childrenMap.get(ROOT_KEY) ?? [];
+
+  roots.forEach((rootNode) => {
+    const rootPlacement = placeSubtree(rootNode.id, 0, usedRows);
+    usedRows = rootPlacement.rowEnd + 1;
+  });
+
+  const positionedNodes = roadmap
+    .map((node) => positionedById.get(node.id))
+    .filter((node): node is PositionedRoadmapNode => Boolean(node));
+
+  const edges: RoadmapEdge[] = positionedNodes
+    .map((childNode) => {
+      if (!childNode.parentId) {
+        return null;
+      }
+
+      const parentNode = positionedById.get(childNode.parentId);
+      if (!parentNode) {
+        return null;
+      }
+
+      const distanceX = childNode.x - parentNode.x;
+      const controlOffset = Math.max(120, Math.min(260, distanceX * 0.42));
+      const path = `M ${parentNode.x} ${parentNode.y} C ${parentNode.x + controlOffset} ${parentNode.y}, ${childNode.x - controlOffset} ${childNode.y}, ${childNode.x} ${childNode.y}`;
+
+      return {
+        id: `${parentNode.id}->${childNode.id}`,
+        parentId: parentNode.id,
+        childId: childNode.id,
+        path,
+      };
+    })
+    .filter((edge): edge is RoadmapEdge => Boolean(edge));
+
+  return {
+    nodes: positionedNodes,
+    edges,
+    nodeById: positionedById,
+    canvasWidth: Math.max(2200, PADDING_X * 2 + (maxDepth + 1) * NODE_SPACING_X + 360),
+    canvasHeight: Math.max(1480, PADDING_Y * 2 + Math.max(4, usedRows + 1) * NODE_SPACING_Y),
+  };
 };
 
 const getNodeTone = (nodeStatus: string, isActiveNode: boolean) => {
@@ -56,6 +172,7 @@ const LearningPathFlow = () => {
     dynamicRoadmap,
     userTargetLevel,
     activeRoadmapNodeId,
+    lastAddedBranchNodeId,
     branchingNodeId,
     branchSuggestions,
     setActiveRoadmapNode,
@@ -71,30 +188,20 @@ const LearningPathFlow = () => {
   const y = useMotionValue(0);
   const scale = useMotionValue(1);
 
-  const roadmapLayout = useMemo(() => {
-    const nodeSpacingX = 560;
-    const canvasWidth = Math.max(2200, 1120 + Math.max(dynamicRoadmap.length - 1, 0) * nodeSpacingX);
-    const canvasHeight = 1480;
+  const treeLayout = useMemo(() => buildRoadmapTreeLayout(dynamicRoadmap), [dynamicRoadmap]);
+  const layoutNodes = treeLayout.nodes;
+  const layoutEdges = treeLayout.edges;
 
-    const nodes = dynamicRoadmap.map((node, index) => {
-      const x = 260 + index * nodeSpacingX;
-      const wave = Math.sin(index * 0.85) * 150;
-      const y = canvasHeight / 2 + (index % 2 === 0 ? -220 : 170) + wave;
+  const activeNode = useMemo(() => {
+    if (activeRoadmapNodeId) {
+      const matchedNode = treeLayout.nodeById.get(activeRoadmapNodeId);
+      if (matchedNode) {
+        return matchedNode;
+      }
+    }
 
-      return {
-        ...node,
-        x,
-        y,
-      } as typeof node & Point;
-    });
-
-    return { nodes, canvasWidth, canvasHeight };
-  }, [dynamicRoadmap]);
-
-  const activeNodeIndex = useMemo(() => {
-    const index = dynamicRoadmap.findIndex((node) => node.id === activeRoadmapNodeId);
-    return index >= 0 ? index : 0;
-  }, [dynamicRoadmap, activeRoadmapNodeId]);
+    return layoutNodes[0] ?? null;
+  }, [activeRoadmapNodeId, layoutNodes, treeLayout.nodeById]);
 
   useEffect(() => {
     if (!branchSuggestions || branchSuggestions.length === 0) {
@@ -133,8 +240,6 @@ const LearningPathFlow = () => {
   };
 
   useEffect(() => {
-    const activeNode = roadmapLayout.nodes[activeNodeIndex];
-
     if (!activeNode) {
       return;
     }
@@ -158,7 +263,7 @@ const LearningPathFlow = () => {
       controlsX.stop();
       controlsY.stop();
     };
-  }, [activeNodeIndex, roadmapLayout, scale, x, y]);
+  }, [activeNode, scale, x, y]);
 
   const handleViewportWheel = (event: WheelEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -269,13 +374,13 @@ const LearningPathFlow = () => {
           y,
           scale,
           transformOrigin: '0 0',
-          width: roadmapLayout.canvasWidth,
-          height: roadmapLayout.canvasHeight,
+          width: treeLayout.canvasWidth,
+          height: treeLayout.canvasHeight,
         }}
       >
         <svg
           className="absolute inset-0 h-full w-full overflow-visible pointer-events-none"
-          viewBox={`0 0 ${roadmapLayout.canvasWidth} ${roadmapLayout.canvasHeight}`}
+          viewBox={`0 0 ${treeLayout.canvasWidth} ${treeLayout.canvasHeight}`}
           preserveAspectRatio="none"
         >
           <defs>
@@ -295,57 +400,78 @@ const LearningPathFlow = () => {
             </filter>
           </defs>
 
-          {roadmapLayout.nodes.slice(1).map((node, index) => {
-            const previousNode = roadmapLayout.nodes[index];
-            const midX = (previousNode.x + node.x) / 2;
-            const bend = index % 2 === 0 ? -180 : 180;
-            const path = `M ${previousNode.x} ${previousNode.y} C ${midX} ${previousNode.y + bend}, ${midX} ${node.y - bend}, ${node.x} ${node.y}`;
-            const isCompletedTrail = index < activeNodeIndex - 1;
-            const isActiveBridge = index === activeNodeIndex - 1;
+          {layoutEdges.map((edge) => {
+            const isNewEdge = edge.childId === lastAddedBranchNodeId;
+
+            if (!isNewEdge) {
+              return (
+                <g key={edge.id}>
+                  <path
+                    d={edge.path}
+                    fill="none"
+                    stroke="rgba(168,85,247,0.2)"
+                    strokeWidth="9"
+                    strokeLinecap="round"
+                    opacity={0.52}
+                  />
+                  <path
+                    d={edge.path}
+                    fill="none"
+                    stroke="url(#energyGradient)"
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeDasharray="12 14"
+                    filter="url(#energyGlow)"
+                    opacity={0.22}
+                  />
+                </g>
+              );
+            }
 
             return (
-              <g key={`segment-${previousNode.id}-${node.id}`}>
-                <path
-                  d={path}
+              <g key={edge.id}>
+                <motion.path
+                  d={edge.path}
                   fill="none"
-                  stroke="rgba(168,85,247,0.16)"
+                  stroke="rgba(168,85,247,0.24)"
                   strokeWidth="10"
                   strokeLinecap="round"
-                  opacity={isCompletedTrail || isActiveBridge ? 1 : 0.25}
+                  initial={{ pathLength: 0, opacity: 0.2 }}
+                  animate={{ pathLength: 1, opacity: 0.85 }}
+                  transition={{ duration: 0.55, ease: 'easeOut' }}
                 />
-                <path
-                  d={path}
+                <motion.path
+                  d={edge.path}
                   fill="none"
                   stroke="url(#energyGradient)"
-                  strokeWidth={isActiveBridge ? 4 : 2.5}
+                  strokeWidth={3.2}
                   strokeLinecap="round"
-                  strokeDasharray={isActiveBridge ? '18 12' : '10 14'}
-                  strokeDashoffset="0"
+                  strokeDasharray="16 12"
                   filter="url(#energyGlow)"
-                  opacity={isCompletedTrail ? 0.35 : isActiveBridge ? 1 : 0.16}
-                  style={{
-                    animation: isCompletedTrail || isActiveBridge ? 'energyFlow 2.4s linear infinite' : undefined,
-                  }}
+                  initial={{ pathLength: 0, opacity: 0.35 }}
+                  animate={{ pathLength: 1, opacity: 1 }}
+                  transition={{ duration: 0.62, ease: 'easeOut' }}
+                  style={{ animation: 'energyFlow 1.8s linear infinite' }}
                 />
               </g>
             );
           })}
         </svg>
 
-        {roadmapLayout.nodes.map((node, index) => {
+        {layoutNodes.map((node, index) => {
           const isActiveNode = node.id === activeRoadmapNodeId;
           const tone = getNodeTone(node.status, isActiveNode);
           const isCurrentStatus = node.status === 'current';
-          const canExploreBranch = (isActiveNode || node.status === 'completed') && !node.hasBranched;
+          const canExploreBranch = isActiveNode || node.status === 'completed';
           const isGeneratingBranch = branchingNodeId === node.id;
+          const isNewNode = node.id === lastAddedBranchNodeId;
 
           return (
             <motion.div
-              layout
               key={node.id}
-              initial={{ opacity: 0, y: 24, scale: 0.96 }}
+              initial={isNewNode ? { opacity: 0, y: 24, scale: 0.92 } : false}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: index * 0.08, type: 'spring', stiffness: 120, damping: 18 }}
+              transition={isNewNode ? { type: 'spring', stiffness: 135, damping: 18 } : { duration: 0 }}
               whileHover={{ y: -8, scale: 1.01 }}
               className="absolute z-20 w-[360px] -translate-x-1/2 -translate-y-1/2 text-left outline-none"
               style={{ left: node.x, top: node.y }}
@@ -455,7 +581,7 @@ const LearningPathFlow = () => {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-white">全息分叉推演完成</h3>
-                <p className="mt-1 text-xs text-slate-400">选择一条冒险路线，系统将把该分支插入当前节点之后。</p>
+                <p className="mt-1 text-xs text-slate-400">选择一条冒险路线，系统将把该分支挂载为当前节点的子节点。</p>
               </div>
               <Button
                 variant="outline"

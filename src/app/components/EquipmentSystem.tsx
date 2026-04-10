@@ -168,21 +168,21 @@ export default function EquipmentSystem() {
   const totalStats = getTotalStats();
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header with Stats */}
-      <Card className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/30">
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-gradient-to-br from-yellow-600 to-orange-600 rounded-xl">
+      <Card className="h-auto shrink-0 bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border-yellow-500/30 overflow-hidden">
+        <CardContent className="p-4">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="shrink-0 p-2.5 bg-gradient-to-br from-yellow-600 to-orange-600 rounded-xl">
                 <Award className="w-8 h-8 text-white" />
               </div>
-              <div className="flex-1">
-                <h2 className="text-2xl font-bold text-white mb-2">装备库</h2>
-                <p className="text-gray-300 mb-4">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xl font-bold text-white mb-1">装备库</h2>
+                <p className="text-sm text-gray-300 text-balance break-words mb-3 leading-relaxed">
                   完成的项目将转化为强大的装备，提升你的技能属性
                 </p>
-                <div className="flex gap-4 text-sm">
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
                   <span className="text-gray-400">
                     总装备: <span className="text-yellow-400 font-bold">{equipment.length}</span>
                   </span>
@@ -194,12 +194,12 @@ export default function EquipmentSystem() {
             </div>
 
             {/* Total Stats Display */}
-            <div className="bg-black/30 rounded-lg p-4 min-w-[300px]">
+            <div className="h-auto shrink-0 bg-black/30 rounded-lg p-3">
               <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-green-400" />
+                <TrendingUp className="w-4 h-4 text-green-400 shrink-0" />
                 装备加成
               </h3>
-              <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="grid grid-cols-1 gap-2 text-sm">
                 {Object.entries(totalStats).map(([key, value]) => {
                   if (value === 0) return null;
                   return (
@@ -210,7 +210,7 @@ export default function EquipmentSystem() {
                   );
                 })}
                 {Object.values(totalStats).every(v => v === 0) && (
-                  <p className="text-gray-500 col-span-2 text-center">暂无装备加成</p>
+                  <p className="text-gray-500 text-center">暂无装备加成</p>
                 )}
               </div>
             </div>
@@ -219,14 +219,14 @@ export default function EquipmentSystem() {
       </Card>
 
       {/* Rarity Filter */}
-      <div className="flex items-center gap-2">
+      <div className="h-auto shrink-0 flex flex-col items-start gap-2">
         <span className="text-white text-sm">稀有度筛选:</span>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
             variant={filterRarity === 'all' ? 'default' : 'outline'}
             onClick={() => setFilterRarity('all')}
-            className={filterRarity === 'all' ? 'bg-purple-600' : ''}
+            className={filterRarity === 'all' ? 'bg-purple-600 shrink-0' : 'shrink-0'}
           >
             全部
           </Button>
@@ -236,7 +236,7 @@ export default function EquipmentSystem() {
               size="sm"
               variant={filterRarity === rarity ? 'default' : 'outline'}
               onClick={() => setFilterRarity(rarity)}
-              className={filterRarity === rarity ? `bg-gradient-to-r ${getRarityColor(rarity).bg}` : getRarityColor(rarity).text}
+              className={filterRarity === rarity ? `bg-gradient-to-r ${getRarityColor(rarity).bg} shrink-0` : `${getRarityColor(rarity).text} shrink-0`}
             >
               {getRarityText(rarity)}
             </Button>
@@ -246,7 +246,7 @@ export default function EquipmentSystem() {
 
       {/* Equipment Grid */}
       {filteredEquipment.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3">
           {filteredEquipment.map((item, index) => {
             const colors = getRarityColor(item.rarity);
             const isEquipped = item.equippedSlot !== null;
@@ -257,26 +257,27 @@ export default function EquipmentSystem() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: index * 0.05 }}
+                className="h-auto shrink-0"
               >
                 <Card 
-                  className={`bg-slate-800/50 border-2 ${colors.border} hover:shadow-lg hover:shadow-${item.rarity === 'legendary' ? 'yellow' : item.rarity === 'epic' ? 'purple' : 'blue'}-500/20 transition-all cursor-pointer ${
+                  className={`h-auto shrink-0 overflow-hidden bg-slate-800/50 border-2 ${colors.border} hover:shadow-lg hover:shadow-${item.rarity === 'legendary' ? 'yellow' : item.rarity === 'epic' ? 'purple' : 'blue'}-500/20 transition-all cursor-pointer ${
                     isEquipped ? 'ring-2 ring-green-500' : ''
                   }`}
                   onClick={() => setSelectedEquipment(item)}
                 >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className={`p-3 bg-gradient-to-br ${colors.bg} rounded-xl text-white`}>
+                  <CardHeader className="p-4 pb-3">
+                    <div className="flex items-start gap-3 mb-2 min-w-0">
+                      <div className={`shrink-0 p-2.5 bg-gradient-to-br ${colors.bg} rounded-xl text-white`}>
                         {item.icon}
                       </div>
-                      <div className="text-right">
+                      <div className="min-w-0 flex-1">
                         <Badge className={`${colors.bg} text-white border-0 mb-1`}>
                           {getRarityText(item.rarity)}
                         </Badge>
                         <p className="text-gray-400 text-xs">{getTypeText(item.type)}</p>
+                        <CardTitle className={`${colors.text} text-base mt-2 break-words`}>{item.name}</CardTitle>
                       </div>
                     </div>
-                    <CardTitle className={`${colors.text} text-lg`}>{item.name}</CardTitle>
                     {isEquipped && (
                       <Badge className="bg-green-600 text-white w-fit">
                         已装备 - {getSlotText(item.equippedSlot)}
@@ -284,11 +285,11 @@ export default function EquipmentSystem() {
                     )}
                   </CardHeader>
 
-                  <CardContent>
-                    <p className="text-gray-400 text-sm mb-3">{item.description}</p>
+                  <CardContent className="p-4 pt-0">
+                    <p className="text-gray-400 text-sm text-balance break-words leading-relaxed mb-3">{item.description}</p>
 
                     {/* Stats */}
-                    <div className="bg-black/30 rounded-lg p-3 mb-3">
+                    <div className="h-auto shrink-0 bg-black/30 rounded-lg p-3 mb-3">
                       <h4 className="text-white text-xs font-semibold mb-2">属性加成</h4>
                       <div className="space-y-1">
                         {Object.entries(item.stats).map(([key, value]) => {
@@ -304,8 +305,8 @@ export default function EquipmentSystem() {
                     </div>
 
                     {/* Source Project */}
-                    <div className="text-xs text-gray-500 mb-3">
-                      <p>来源: {item.sourceProject.title}</p>
+                    <div className="text-xs text-gray-500 mb-3 space-y-1 break-words">
+                      <p className="text-balance">来源: {item.sourceProject.title}</p>
                       <p>评分: {item.sourceProject.aiScore}/100</p>
                     </div>
 
@@ -341,8 +342,8 @@ export default function EquipmentSystem() {
           })}
         </div>
       ) : (
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardContent className="p-12 text-center">
+        <Card className="h-auto shrink-0 bg-slate-800/50 border-slate-700">
+          <CardContent className="p-4 text-center">
             <PackageOpen className="w-16 h-16 text-gray-600 mx-auto mb-4" />
             <p className="text-gray-400 text-lg mb-2">
               {filterRarity === 'all' ? '装备库空空如也' : `暂无${getRarityText(filterRarity)}装备`}
