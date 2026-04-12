@@ -17,7 +17,7 @@ import { Progress } from './components/ui/progress';
 import { Card } from './components/ui/card';
 import { Badge } from './components/ui/badge';
 import { Compass } from 'lucide-react';
-import { ensureUserProfile, onAuthStateChange } from '../lib/supabase';
+import { ensureUserProfile, supabase } from '../lib/supabase';
 
 export default function App() {
   // 从 Store 获取全局状态
@@ -36,18 +36,26 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    const subscription = onAuthStateChange((session) => {
-      void (async () => {
-        if (session?.user) {
-          try {
-            await ensureUserProfile(session);
-          } catch (error) {
-            console.error('[App:onAuthStateChange] Failed to ensure user profile:', error);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        void (async () => {
+          if (session?.user) {
+            try {
+              await ensureUserProfile(session);
+            } catch (error) {
+              console.error('[App:onAuthStateChange] Failed to ensure user profile:', error);
+            }
           }
-        }
 
-        await fetchUserData();
-      })();
+          await fetchUserData();
+        })();
+      }
+
+      if (event === 'SIGNED_OUT') {
+        void fetchUserData();
+      }
     });
 
     return () => {

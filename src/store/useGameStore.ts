@@ -779,13 +779,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       if (!session?.user) {
-        set({
-          currentUser: null,
-          dynamicRoadmap: [],
-          skillProgress: {},
-          gapNodes: [],
-          isSyncing: false,
-        });
+        get().resetOnboarding();
+        set({ isSyncing: false });
 
         return;
       }
@@ -852,15 +847,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextLevel = userRow.user_level;
       const nextCareerDirection = userRow.career_direction;
       const nextCurrentUser = mapUserRowToCurrentUser(userRow, session.user.email ?? '');
+      const nextDynamicRoadmap = roadmapRow ? normalizeRoadmapNodes(roadmapRow.roadmap_data) : [];
+      const shouldMarkOnboarded = Boolean(nextCareerDirection) && nextDynamicRoadmap.length > 0;
 
       set({
         currentUser: nextCurrentUser,
         totalExp: nextTotalExp,
         level: nextLevel,
         careerDirection: nextCareerDirection,
+        isOnboarded: shouldMarkOnboarded,
         skillProgress: normalizeSkillProgress(progressRows),
         gapNodes: progressRows.filter((row) => !row.is_finished).map((row) => row.skill_id),
-        dynamicRoadmap: roadmapRow ? normalizeRoadmapNodes(roadmapRow.roadmap_data) : [],
+        dynamicRoadmap: nextDynamicRoadmap,
+        activeRoadmapNodeId: nextDynamicRoadmap[0]?.id ?? null,
       });
     } catch (error) {
       console.error('[useGameStore:fetchUserData] Failed to load user data:', error);
@@ -876,6 +875,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setTargetLevel: (direction, level) => {
     const nextRoadmap = cloneRoadmapSeed(level);
     const nextGapNodes = nextRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
+    const now = new Date().toISOString();
 
     set({
       careerDirection: direction,
@@ -891,6 +891,32 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const currentUser = get().currentUser;
     if (currentUser) {
+      void (async () => {
+        try {
+          const { error } = await queryClient.from('users').upsert(
+            {
+              id: currentUser.id,
+              email: currentUser.email,
+              display_name: currentUser.displayName,
+              avatar_url: currentUser.avatarUrl,
+              career_direction: direction,
+              user_level: currentUser.userLevel,
+              total_exp: currentUser.totalExp,
+              updated_at: now,
+            },
+            {
+              onConflict: 'id',
+            }
+          );
+
+          if (error) {
+            throw error;
+          }
+        } catch (error) {
+          console.error('[useGameStore:setTargetLevel] Failed to sync user baseline:', error);
+        }
+      })();
+
       void syncRoadmapToSupabase(currentUser.id, nextRoadmap);
     }
   },
