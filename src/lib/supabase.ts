@@ -8,6 +8,36 @@ const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || 'h
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+export async function ensureUserProfile(session: any) {
+  if (!session?.user?.id) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const metadata = session.user.user_metadata ?? {};
+
+  const payload = {
+    id: session.user.id,
+    email: session.user.email ?? '',
+    display_name: metadata.display_name ?? metadata.full_name ?? null,
+    avatar_url: metadata.avatar_url ?? metadata.picture ?? null,
+    updated_at: now,
+  };
+
+  const { data, error } = await supabase
+    .from('users')
+    .upsert(payload, { onConflict: 'id' })
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    console.error('Ensure user profile error:', error);
+    throw error;
+  }
+
+  return data;
+}
+
 // 辅助函数：使用 Google OAuth 登录
 export async function signInWithGoogle() {
   try {

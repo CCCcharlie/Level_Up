@@ -8,7 +8,7 @@ import {
   requestBranchSuggestions,
 } from '../lib/aiService.ts';
 import { INITIAL_ROADMAPS } from '../data/roadmapTemplates';
-import { supabase } from '../lib/supabase';
+import { ensureUserProfile, supabase } from '../lib/supabase';
 import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
 
 // --- 类型定义 ---
@@ -781,6 +781,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (!session?.user) {
         set({
           currentUser: null,
+          dynamicRoadmap: [],
+          skillProgress: {},
+          gapNodes: [],
           isSyncing: false,
         });
 
@@ -789,12 +792,39 @@ export const useGameStore = create<GameState>((set, get) => ({
 
       const userId = session.user.id;
 
-      const [userResult, progressResult, roadmapResult] = await Promise.all([
-        queryClient
+      let userResult = await queryClient
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (userResult.error) {
+        throw userResult.error;
+      }
+
+      let userRow: UserRow | null = userResult.data ?? null;
+
+      if (!userRow) {
+        await ensureUserProfile(session);
+
+        userResult = await queryClient
           .from('users')
           .select('*')
           .eq('id', userId)
-          .maybeSingle(),
+          .maybeSingle();
+
+        if (userResult.error) {
+          throw userResult.error;
+        }
+
+        userRow = userResult.data ?? null;
+      }
+
+      if (!userRow) {
+        throw new Error('Missing users row after ensureUserProfile.');
+      }
+
+      const [progressResult, roadmapResult] = await Promise.all([
         queryClient
           .from('progress')
           .select('*')
@@ -807,13 +837,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           .limit(1),
       ]);
 
-      const userRow: UserRow | null = userResult.data ?? null;
       const progressRows: ProgressRow[] = progressResult.data ?? [];
       const roadmapRow: RoadmapRow | null = roadmapResult.data?.[0] ?? null;
-
-      if (userResult.error) {
-        throw userResult.error;
-      }
 
       if (progressResult.error) {
         throw progressResult.error;
@@ -823,20 +848,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         throw roadmapResult.error;
       }
 
-      const nextTotalExp = userRow?.total_exp ?? get().totalExp;
-      const nextLevel = userRow?.user_level ?? Math.floor(nextTotalExp / 1000) + 1;
-      const nextCareerDirection = userRow?.career_direction ?? get().careerDirection;
-      const nextCurrentUser = userRow
-        ? mapUserRowToCurrentUser(userRow, session.user.email ?? '')
-        : {
-            id: session.user.id,
-            email: session.user.email ?? '',
-            displayName: session.user.user_metadata?.display_name ?? null,
-            avatarUrl: session.user.user_metadata?.avatar_url ?? null,
-            userLevel: nextLevel,
-            totalExp: nextTotalExp,
-            careerDirection: nextCareerDirection,
-          };
+      const nextTotalExp = userRow.total_exp;
+      const nextLevel = userRow.user_level;
+      const nextCareerDirection = userRow.career_direction;
+      const nextCurrentUser = mapUserRowToCurrentUser(userRow, session.user.email ?? '');
 
       set({
         currentUser: nextCurrentUser,
@@ -867,6 +882,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       userTargetLevel: level,
       isOnboarded: true,
       dynamicRoadmap: nextRoadmap,
+      skillProgress: {},
       gapNodes: nextGapNodes,
       activeRoadmapNodeId: nextRoadmap[0]?.id || null,
       lastAddedBranchNodeId: null,
