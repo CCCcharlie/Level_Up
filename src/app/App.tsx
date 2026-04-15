@@ -16,19 +16,25 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Progress } from './components/ui/progress';
 import { Card } from './components/ui/card';
 import { Badge } from './components/ui/badge';
-import { Compass } from 'lucide-react';
-import { ensureUserProfile, supabase } from '../lib/supabase';
+import { Avatar, AvatarFallback, AvatarImage } from './components/ui/avatar';
+import { Button } from './components/ui/button';
+import { Toaster } from './components/ui/sonner';
+import { Compass, LogOut, User } from 'lucide-react';
+import { ensureUserProfile, signInWithGoogle, supabase } from '../lib/supabase';
+import { toast } from 'sonner';
 
 export default function App() {
   // 从 Store 获取全局状态
   const {
     fetchUserData,
+    signOut,
     isSyncing,
     isOnboarded, 
     level, 
     totalExp, 
     careerDirection, 
-    userTargetLevel 
+    userTargetLevel,
+    currentUser,
   } = useGameStore();
 ;
   useEffect(() => {
@@ -39,7 +45,33 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const userName =
+          session.user.user_metadata?.display_name ||
+          session.user.user_metadata?.full_name ||
+          session.user.email ||
+          '用户';
+
+        toast.success(`欢迎回来，${userName}`);
+
+        if (window.location.hash.includes('access_token=')) {
+          window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+        }
+
+        void (async () => {
+          try {
+            await ensureUserProfile(session);
+          } catch (error) {
+            console.error('[App:onAuthStateChange] Failed to ensure user profile:', error);
+          }
+
+          await fetchUserData();
+        })();
+
+        return;
+      }
+
+      if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
         void (async () => {
           if (session?.user) {
             try {
@@ -54,6 +86,14 @@ export default function App() {
       }
 
       if (event === 'SIGNED_OUT') {
+        toast('你已退出登录', {
+          action: {
+            label: 'Sign in',
+            onClick: () => {
+              void signInWithGoogle();
+            },
+          },
+        });
         void fetchUserData();
       }
     });
@@ -65,6 +105,7 @@ export default function App() {
 
   if (isSyncing) {
     return (
+      <>
       <div className="relative flex h-screen w-full items-center justify-center overflow-hidden bg-black text-slate-200">
         <style>
           {`
@@ -106,15 +147,26 @@ export default function App() {
           </p>
         </div>
       </div>
+      <Toaster richColors closeButton />
+      </>
     );
   }
 
   // 如果未完成引导，显示入站界面
   if (!isOnboarded) {
-    return <CareerOnboarding />;
+    return (
+      <>
+        <CareerOnboarding />
+        <Toaster richColors closeButton />
+      </>
+    );
   }
 
+  const userLabel = currentUser?.displayName || currentUser?.email || '未命名用户';
+  const userInitial = (currentUser?.displayName || currentUser?.email || 'U').trim().charAt(0).toUpperCase();
+
   return (
+    <>
     <div className="dark relative flex h-screen w-full overflow-hidden bg-slate-950 font-sans text-slate-200 selection:bg-purple-500/30">
       {/* 背景径向渐变 */}
       <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_20%_0%,rgba(76,29,149,0.15)_0%,transparent_50%)]" />
@@ -132,6 +184,32 @@ export default function App() {
         <Sidebar className="relative z-10 border-r border-slate-800 bg-slate-900/40 backdrop-blur-xl">
           <SidebarHeader className="p-6 border-b border-slate-800/50">
             <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2 backdrop-blur-sm">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Avatar className="size-10 border border-slate-700">
+                    <AvatarImage src={currentUser?.avatarUrl || undefined} alt={userLabel} />
+                    <AvatarFallback className="bg-slate-800 text-slate-200">
+                      {currentUser?.avatarUrl ? userInitial : <User className="h-4 w-4" />}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">{userLabel}</p>
+                    <p className="truncate text-[11px] text-slate-400">{currentUser?.email || '未绑定邮箱'}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 border border-slate-800 bg-slate-900/70 text-slate-300 hover:bg-slate-800 hover:text-white"
+                  onClick={() => {
+                    void signOut();
+                  }}
+                  aria-label="退出登录"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <div className="absolute -inset-1 bg-purple-500 rounded-full blur opacity-20 animate-pulse" />
@@ -209,5 +287,7 @@ export default function App() {
         </SidebarInset>
       </SidebarProvider>
     </div>
+    <Toaster richColors closeButton />
+    </>
   );
 }

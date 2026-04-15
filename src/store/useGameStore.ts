@@ -691,6 +691,7 @@ interface GameState {
   equipItem: (id: string, slot: Equipment['equippedSlot']) => void;
   unequipItem: (id: string) => void;
   resetOnboarding: () => void;
+  signOut: () => Promise<void>;
 }
 
 // --- Store 实现 ---
@@ -848,19 +849,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       const nextCareerDirection = userRow.career_direction;
       const nextCurrentUser = mapUserRowToCurrentUser(userRow, session.user.email ?? '');
       const nextDynamicRoadmap = roadmapRow ? normalizeRoadmapNodes(roadmapRow.roadmap_data) : [];
-      const shouldMarkOnboarded = Boolean(nextCareerDirection) && nextDynamicRoadmap.length > 0;
+      const hasPersistedOnboardingData = Boolean(nextCareerDirection) || nextDynamicRoadmap.length > 0;
 
       set({
         currentUser: nextCurrentUser,
         totalExp: nextTotalExp,
         level: nextLevel,
         careerDirection: nextCareerDirection,
-        isOnboarded: shouldMarkOnboarded,
+        isOnboarded: hasPersistedOnboardingData,
         skillProgress: normalizeSkillProgress(progressRows),
         gapNodes: progressRows.filter((row) => !row.is_finished).map((row) => row.skill_id),
         dynamicRoadmap: nextDynamicRoadmap,
         activeRoadmapNodeId: nextDynamicRoadmap[0]?.id ?? null,
       });
+
+      if (hasPersistedOnboardingData) {
+        set({ isOnboarded: true });
+      }
     } catch (error) {
       console.error('[useGameStore:fetchUserData] Failed to load user data:', error);
     } finally {
@@ -1347,6 +1352,42 @@ export const useGameStore = create<GameState>((set, get) => ({
     currentUser: null,
     skillProgress: {},
   }),
+
+  signOut: async () => {
+    const resetState = {
+      isOnboarded: false,
+      careerDirection: null,
+      userTargetLevel: 'Junior' as TargetLevel,
+      currentUser: null,
+      isSyncing: false,
+      isExtending: false,
+      branchingNodeId: null,
+      branchSuggestions: null,
+      dynamicRoadmap: [],
+      gapNodes: [],
+      skillProgress: {},
+      activeRoadmapNodeId: null,
+      lastAddedBranchNodeId: null,
+      totalExp: 3250,
+      level: 8,
+      skillPoints: 15,
+    };
+
+    try {
+      const { error } = await queryClient.auth.signOut();
+
+      if (error) {
+        throw error;
+      }
+
+      set(resetState);
+      toast.success('已退出登录');
+    } catch (error) {
+      set(resetState);
+      toast.error('退出登录失败，已清理本地会话状态');
+      console.error('[useGameStore:signOut] Failed to sign out:', error);
+    }
+  },
 }));
 
 export default useGameStore;
