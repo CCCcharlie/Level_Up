@@ -8,7 +8,7 @@ import {
   requestBranchSuggestions,
 } from '../lib/aiService.ts';
 import { INITIAL_ROADMAPS } from '../data/roadmapTemplates';
-import { supabase } from '../lib/supabase';
+import { ensureUserProfile, supabase } from '../lib/supabase';
 import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
 
 // --- 类型定义 ---
@@ -779,22 +779,47 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
 
       if (!session?.user) {
-        set({
-          currentUser: null,
-          isSyncing: false,
-        });
+        get().resetOnboarding();
+        set({ isSyncing: false });
 
         return;
       }
 
       const userId = session.user.id;
 
-      const [userResult, progressResult, roadmapResult] = await Promise.all([
-        queryClient
+      let userResult = await queryClient
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (userResult.error) {
+        throw userResult.error;
+      }
+
+      let userRow: UserRow | null = userResult.data ?? null;
+
+      if (!userRow) {
+        await ensureUserProfile(session);
+
+        userResult = await queryClient
           .from('users')
           .select('*')
           .eq('id', userId)
-          .maybeSingle(),
+          .maybeSingle();
+
+        if (userResult.error) {
+          throw userResult.error;
+        }
+
+        userRow = userResult.data ?? null;
+      }
+
+      if (!userRow) {
+        throw new Error('Missing users row after ensureUserProfile.');
+      }
+
+      const [progressResult, roadmapResult] = await Promise.all([
         queryClient
           .from('progress')
           .select('*')
@@ -807,13 +832,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           .limit(1),
       ]);
 
-      const userRow: UserRow | null = userResult.data ?? null;
       const progressRows: ProgressRow[] = progressResult.data ?? [];
       const roadmapRow: RoadmapRow | null = roadmapResult.data?.[0] ?? null;
-
-      if (userResult.error) {
-        throw userResult.error;
-      }
 
       if (progressResult.error) {
         throw progressResult.error;
@@ -823,29 +843,23 @@ export const useGameStore = create<GameState>((set, get) => ({
         throw roadmapResult.error;
       }
 
-      const nextTotalExp = userRow?.total_exp ?? get().totalExp;
-      const nextLevel = userRow?.user_level ?? Math.floor(nextTotalExp / 1000) + 1;
-      const nextCareerDirection = userRow?.career_direction ?? get().careerDirection;
-      const nextCurrentUser = userRow
-        ? mapUserRowToCurrentUser(userRow, session.user.email ?? '')
-        : {
-            id: session.user.id,
-            email: session.user.email ?? '',
-            displayName: session.user.user_metadata?.display_name ?? null,
-            avatarUrl: session.user.user_metadata?.avatar_url ?? null,
-            userLevel: nextLevel,
-            totalExp: nextTotalExp,
-            careerDirection: nextCareerDirection,
-          };
+      const nextTotalExp = userRow.total_exp;
+      const nextLevel = userRow.user_level;
+      const nextCareerDirection = userRow.career_direction;
+      const nextCurrentUser = mapUserRowToCurrentUser(userRow, session.user.email ?? '');
+      const nextDynamicRoadmap = roadmapRow ? normalizeRoadmapNodes(roadmapRow.roadmap_data) : [];
+      const shouldMarkOnboarded = Boolean(nextCareerDirection) && nextDynamicRoadmap.length > 0;
 
       set({
         currentUser: nextCurrentUser,
         totalExp: nextTotalExp,
         level: nextLevel,
         careerDirection: nextCareerDirection,
+        isOnboarded: shouldMarkOnboarded,
         skillProgress: normalizeSkillProgress(progressRows),
         gapNodes: progressRows.filter((row) => !row.is_finished).map((row) => row.skill_id),
-        dynamicRoadmap: roadmapRow ? normalizeRoadmapNodes(roadmapRow.roadmap_data) : [],
+        dynamicRoadmap: nextDynamicRoadmap,
+        activeRoadmapNodeId: nextDynamicRoadmap[0]?.id ?? null,
       });
     } catch (error) {
       console.error('[useGameStore:fetchUserData] Failed to load user data:', error);
@@ -861,12 +875,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   setTargetLevel: (direction, level) => {
     const nextRoadmap = cloneRoadmapSeed(level);
     const nextGapNodes = nextRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
+    const now = new Date().toISOString();
 
     set({
       careerDirection: direction,
       userTargetLevel: level,
       isOnboarded: true,
       dynamicRoadmap: nextRoadmap,
+      skillProgress: {},
       gapNodes: nextGapNodes,
       activeRoadmapNodeId: nextRoadmap[0]?.id || null,
       lastAddedBranchNodeId: null,
@@ -875,6 +891,32 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const currentUser = get().currentUser;
     if (currentUser) {
+      void (async () => {
+        try {
+          const { error } = await queryClient.from('users').upsert(
+            {
+              id: currentUser.id,
+              email: currentUser.email,
+              display_name: currentUser.displayName,
+              avatar_url: currentUser.avatarUrl,
+              career_direction: direction,
+              user_level: currentUser.userLevel,
+              total_exp: currentUser.totalExp,
+              updated_at: now,
+            },
+            {
+              onConflict: 'id',
+            }
+          );
+
+          if (error) {
+            throw error;
+          }
+        } catch (error) {
+          console.error('[useGameStore:setTargetLevel] Failed to sync user baseline:', error);
+        }
+      })();
+
       void syncRoadmapToSupabase(currentUser.id, nextRoadmap);
     }
   },
