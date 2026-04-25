@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import useGameStore from '../store/useGameStore';
 import { CareerOnboarding } from './components/CareerOnboarding';
 import  LearningPathFlow  from './components/LearningPathFlow';
@@ -25,6 +26,7 @@ import { ensureUserProfile, signInWithGoogle, supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 
 export default function App() {
+  const { t } = useTranslation();
   // 从 Store 获取全局状态
   const {
     fetchUserData,
@@ -51,9 +53,9 @@ export default function App() {
           session.user.user_metadata?.display_name ||
           session.user.user_metadata?.full_name ||
           session.user.email ||
-          '用户';
+          t('auth.unnamedUser');
 
-        toast.success(`欢迎回来，${userName}`);
+        toast.success(t('auth.welcomeBack', { name: userName }));
 
         if (window.location.hash.includes('access_token=')) {
           window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
@@ -87,9 +89,9 @@ export default function App() {
       }
 
       if (event === 'SIGNED_OUT') {
-        toast('你已退出登录', {
+        toast(t('auth.signOutMessage'), {
           action: {
-            label: 'Sign in',
+            label: t('auth.signIn'),
             onClick: () => {
               void signInWithGoogle();
             },
@@ -163,7 +165,7 @@ export default function App() {
     );
   }
 
-  const userLabel = currentUser?.displayName || currentUser?.email || '未命名用户';
+  const userLabel = currentUser?.displayName || currentUser?.email || t('auth.unnamedUser');
   const userInitial = (currentUser?.displayName || currentUser?.email || 'U').trim().charAt(0).toUpperCase();
 
   return (
@@ -195,7 +197,7 @@ export default function App() {
                   </Avatar>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-white">{userLabel}</p>
-                    <p className="truncate text-[11px] text-slate-400">{currentUser?.email || '未绑定邮箱'}</p>
+                    <p className="truncate text-[11px] text-slate-400">{currentUser?.email || t('auth.emailNotBound')}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -207,7 +209,7 @@ export default function App() {
                   onClick={() => {
                     void signOut();
                   }}
-                  aria-label="退出登录"
+                  aria-label={t('auth.signOut')}
                 >
                   <LogOut className="h-4 w-4" />
                   </Button>
@@ -230,7 +232,7 @@ export default function App() {
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-[10px] text-slate-500 px-1 font-mono">
-                  <span>EXP PROGRESS</span>
+                  <span>{t('app.expProgress')}</span>
                   <span>{totalExp % 1000} / 1000</span>
                 </div>
                 <Progress value={(totalExp % 1000) / 10} className="h-1.5 bg-slate-800" />
@@ -267,15 +269,15 @@ export default function App() {
             <div className="ml-4 h-4 w-px bg-slate-800" />
             <div className="ml-4 flex items-center gap-2 text-xs font-mono text-slate-500 uppercase tracking-widest">
               <Compass className="w-3 h-3" />
-              Neural Navigation System
+              {t('app.navTitle')}
             </div>
           </header>
 
           <div className="flex-1 overflow-hidden p-6">
             <Tabs defaultValue="roadmap" className="h-full flex flex-col">
               <TabsList className="bg-slate-900/50 border border-slate-800 w-fit mb-6">
-                <TabsTrigger value="roadmap" className="data-[state=active]:bg-purple-600 px-8">路线图</TabsTrigger>
-                <TabsTrigger value="star-chart" className="data-[state=active]:bg-blue-600 px-8">全息星盘</TabsTrigger>
+                <TabsTrigger value="roadmap" className="data-[state=active]:bg-purple-600 px-8">{t('app.roadmapTab')}</TabsTrigger>
+                <TabsTrigger value="star-chart" className="data-[state=active]:bg-blue-600 px-8">{t('app.starChartTab')}</TabsTrigger>
               </TabsList>
 
               <Card className="flex-1 bg-slate-900/20 border-slate-800 backdrop-blur-sm relative overflow-hidden">

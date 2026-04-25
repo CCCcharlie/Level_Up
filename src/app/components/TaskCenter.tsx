@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -64,6 +65,7 @@ interface TaskCenterProps {
 
 export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCenterProps) {
   const [activeTab, setActiveTab] = useState<'all' | 'recommended' | 'skill-specific'>('recommended');
+  const { t } = useTranslation();
   const [activeTasks, setActiveTasks] = useState<string[]>([]);
   const [completedTasks, setCompletedTasks] = useState<string[]>([]);
   const [taskProgress, setTaskProgress] = useState<Record<string, number>>({});
@@ -336,9 +338,9 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
 
   const getDifficultyText = (difficulty: string) => {
     switch (difficulty) {
-      case 'easy': return '简单';
-      case 'medium': return '中等';
-      case 'hard': return '困难';
+      case 'easy': return t('taskCenter.difficultyEasy');
+        case 'medium': return t('taskCenter.difficultyMedium');
+        case 'hard': return t('taskCenter.difficultyHard');
       default: return '';
     }
   };
@@ -351,7 +353,7 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
     if (!activeTasks.includes(taskId)) {
       setActiveTasks(prev => [...prev, taskId]);
       setTaskProgress(prev => ({ ...prev, [taskId]: 0 }));
-      toast.success('任务已接受！开始完成任务步骤吧', { icon: '📝' });
+      toast.success(t('taskCenter.accepted'), { icon: '📝' });
     }
   };
 
@@ -375,7 +377,7 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
 
     const progress = taskProgress[taskId] || 0;
     if (progress < 100) {
-      toast.error('请先完成所有任务步骤！');
+      toast.error(t('taskCenter.completeAllSteps'));
       return;
     }
 
@@ -383,7 +385,7 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
     setActiveTasks(prev => prev.filter(id => id !== taskId));
     
     toast.success(
-      `恭喜完成任务！获得 ${task.rewards.xp} XP 和 ${task.rewards.skillPoints} 技能点`,
+      t('taskCenter.congratulations', { xp: task.rewards.xp, skillPoints: task.rewards.skillPoints }),
       { icon: '🎉', duration: 5000 }
     );
 
@@ -422,7 +424,7 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
 
               {/* Required Skills */}
               <div className="mb-3">
-                <p className="text-gray-500 text-xs mb-2">技能要求</p>
+                  <p className="text-gray-500 text-xs mb-2">{t('taskCenter.skillRequirements')}</p>
                 <div className="flex flex-wrap gap-2">
                   {task.requiredSkills.map(req => {
                     const meetsRequirement = req.currentLevel! >= req.minLevel;
@@ -481,7 +483,7 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
               >
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-white text-sm font-semibold">任务进度</span>
+                    <span className="text-white text-sm font-semibold">{t('taskCenter.taskProgress')}</span>
                     <span className="text-gray-400 text-sm">{Math.round(progress)}%</span>
                   </div>
                   <Progress value={progress} className="h-2" />
@@ -519,12 +521,12 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
                 {canStart ? (
                   <>
                     <Target className="w-4 h-4 mr-2" />
-                    接受任务
+                    {t('taskCenter.acceptTask')}
                   </>
                 ) : (
                   <>
                     <AlertCircle className="w-4 h-4 mr-2" />
-                    技能不足
+                    {t('taskCenter.insufficientSkills')}
                   </>
                 )}
               </Button>
@@ -538,14 +540,14 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
                   className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
                 >
                   <Award className="w-4 h-4 mr-2" />
-                  提交任务
+                  {t('taskCenter.submitTask')}
                 </Button>
                 <Button
                   onClick={() => setActiveTasks(prev => prev.filter(id => id !== task.id))}
                   variant="outline"
                   className="border-red-500 text-red-500 hover:bg-red-500/10"
                 >
-                  放弃
+                  {t('taskCenter.abandon')}
                 </Button>
               </>
             )}
@@ -553,7 +555,7 @@ export function TaskCenter({ selectedSkill, allSkills, onTaskComplete }: TaskCen
             {isCompleted && (
               <Badge className="flex-1 bg-green-600 text-white justify-center py-2">
                 <CheckCircle2 className="w-4 h-4 mr-2" />
-                已完成
+                {t('taskCenter.completedStatus')}
               </Badge>
             )}
           </div>

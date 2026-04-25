@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -19,6 +20,7 @@ interface Skill {
 }
 
 export function SkillTree() {
+  const { t } = useTranslation();
   const [selectedSkill, setSelectedSkill] = useState<Skill | null>(null);
   const [userXP, setUserXP] = useState(850);
 
@@ -45,7 +47,12 @@ export function SkillTree() {
     { id: 'vite', name: 'Vite', description: '下一代前端构建工具', category: '工具链', level: 0, maxLevel: 3, unlocked: false, prerequisites: ['react'], xpCost: 150 },
   ]);
 
-  const categories = ['前端基础', 'JavaScript', 'React生态', '工具链'];
+  const categories = [
+    t('skillTree.categories.frontendFoundation'),
+    t('skillTree.categories.javascript'),
+    t('skillTree.categories.reactEcosystem'),
+    t('skillTree.categories.tooling'),
+  ];
 
   const unlockSkill = (skill: Skill) => {
     if (userXP >= skill.xpCost && !skill.unlocked) {
@@ -90,10 +97,10 @@ export function SkillTree() {
           <div>
             <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-600" />
-              可用经验值
+              {t('skillTree.availableXP')}
             </h3>
             <p className="text-sm text-gray-600 mt-1">
-              完成任务获得经验值来解锁新技能
+              {t('skillTree.xpHint')}
             </p>
           </div>
           <div className="text-4xl font-bold text-purple-600">{userXP} XP</div>
@@ -187,7 +194,7 @@ export function SkillTree() {
               
               <div className="space-y-4 mt-4">
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium text-gray-700">等级</span>
+                  <span className="text-sm font-medium text-gray-700">{t('skillTree.level')}</span>
                   <div className="flex items-center gap-2">
                     {Array.from({ length: selectedSkill.maxLevel }).map((_, i) => (
                       <Star
@@ -203,7 +210,7 @@ export function SkillTree() {
                 </div>
 
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <span className="text-sm font-medium text-gray-700">升级费用</span>
+                  <span className="text-sm font-medium text-gray-700">{t('skillTree.upgradeCost')}</span>
                   <span className="text-lg font-bold text-purple-600">
                     {selectedSkill.xpCost} XP
                   </span>
@@ -211,9 +218,7 @@ export function SkillTree() {
 
                 {selectedSkill.prerequisites.length > 0 && (
                   <div className="p-4 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700 mb-2 block">
-                      前置技能
-                    </span>
+                    <span className="text-sm font-medium text-gray-700 mb-2 block">{t('skillTree.prerequisites')}</span>
                     <div className="flex flex-wrap gap-2">
                       {selectedSkill.prerequisites.map((prereqId) => {
                         const prereq = skills.find((s) => s.id === prereqId);
@@ -239,7 +244,7 @@ export function SkillTree() {
                     }
                   >
                     <Lock className="w-4 h-4 mr-2" />
-                    解锁技能
+                    {t('skillTree.unlockSkill')}
                   </Button>
                 ) : selectedSkill.level < selectedSkill.maxLevel ? (
                   <Button
@@ -248,13 +253,13 @@ export function SkillTree() {
                     disabled={userXP < selectedSkill.xpCost}
                   >
                     <Star className="w-4 h-4 mr-2" />
-                    升级 ({selectedSkill.level + 1}/{selectedSkill.maxLevel})
+                    {t('skillTree.upgrade', { level: selectedSkill.level + 1, maxLevel: selectedSkill.maxLevel })}
                   </Button>
                 ) : (
                   <div className="text-center p-4 bg-yellow-50 rounded-lg">
                     <CheckCircle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
                     <p className="text-sm font-medium text-gray-700">
-                      已达到最高等级！
+                      {t('skillTree.maxLevelReached')}
                     </p>
                   </div>
                 )}

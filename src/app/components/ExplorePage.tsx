@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -56,6 +57,7 @@ interface LearningPath {
 }
 
 export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('recommendations');
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
 
@@ -203,12 +205,8 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
               <Brain className="w-8 h-8 text-white" />
             </div>
             <div className="flex-1">
-              <h2 className="text-2xl font-bold text-white mb-2">
-                AI 智能职业探索
-              </h2>
-              <p className="text-gray-300 mb-4">
-                基于你的技能水平和职业方向，我们为你推荐最适合的学习路径
-              </p>
+              <h2 className="text-2xl font-bold text-white mb-2">{t('explorePage.aiExploration')}</h2>
+              <p className="text-gray-300 mb-4">{t('explorePage.explorationDesc')}</p>
               <div className="flex flex-wrap gap-2">
                 {selectedCareers.map(career => (
                   <Badge key={career} className="bg-purple-600 text-white">
@@ -260,15 +258,15 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
         <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border border-slate-700">
           <TabsTrigger value="projects" className="data-[state=active]:bg-green-600">
             <FolderKanban className="w-4 h-4 mr-2" />
-            实战项目
+            {t('explorePage.practiceProjects')}
           </TabsTrigger>
           <TabsTrigger value="recommendations" className="data-[state=active]:bg-purple-600">
             <Sparkles className="w-4 h-4 mr-2" />
-            AI 推荐
+            {t('explorePage.aiRecommend')}
           </TabsTrigger>
           <TabsTrigger value="paths" className="data-[state=active]:bg-blue-600">
             <BookOpen className="w-4 h-4 mr-2" />
-            学习路径
+            {t('explorePage.learningPath')}
           </TabsTrigger>
         </TabsList>
 
@@ -314,7 +312,7 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
                                 {rec.matchScore}%
                               </span>
                             </div>
-                            <p className="text-xs text-gray-500">匹配度</p>
+                            <p className="text-xs text-gray-500">{t('explorePage.matchingDegree')}</p>
                           </div>
                         </div>
 
@@ -339,7 +337,7 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
                           </div>
 
                           <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
-                            开始学习
+                            {t('explorePage.startLearning')}
                             <ChevronRight className="w-4 h-4 ml-1" />
                           </Button>
                         </div>
@@ -381,7 +379,7 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
                       <div>
                         <h4 className="text-white font-semibold mb-3 flex items-center gap-2">
                           <BookOpen className="w-4 h-4 text-blue-400" />
-                          学习步骤
+                          {t('explorePage.learningSteps')}
                         </h4>
                         <div className="space-y-2">
                           {path.steps.map((step, stepIndex) => (
@@ -401,7 +399,7 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
                       {/* Skills & Duration */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-700">
                         <div>
-                          <p className="text-gray-500 text-sm mb-2">涉及技能</p>
+                          <p className="text-gray-500 text-sm mb-2">{t('explorePage.skillsInvolved')}</p>
                           <div className="flex flex-wrap gap-2">
                             {path.skills.map(skill => (
                               <Badge key={skill} variant="outline" className="text-gray-300 border-gray-600">
@@ -411,7 +409,7 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
                           </div>
                         </div>
                         <div>
-                          <p className="text-gray-500 text-sm mb-2">预计时长</p>
+                          <p className="text-gray-500 text-sm mb-2">{t('explorePage.estimatedTime')}</p>
                           <div className="flex items-center gap-2">
                             <Clock className="w-5 h-5 text-blue-400" />
                             <span className="text-white font-semibold">{path.duration}</span>
@@ -420,7 +418,7 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
                       </div>
 
                       <Button className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
-                        开始此路径
+                        {t('explorePage.startThisPath')}
                         <Rocket className="w-4 h-4 ml-2" />
                       </Button>
                     </div>
@@ -437,7 +435,7 @@ export function ExplorePage({ selectedCareers, skillsData }: ExplorePageProps) {
         <CardHeader>
           <CardTitle className="text-white flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-green-400" />
-            你的学习进度
+            {t('explorePage.learningProgress')}
           </CardTitle>
         </CardHeader>
         <CardContent>

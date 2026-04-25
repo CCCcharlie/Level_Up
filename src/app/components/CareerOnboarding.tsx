@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, Terminal, Code2, Database, Layout, Loader2, Chrome } from 'lucide-react';
 import { Button } from './ui/button';
@@ -6,21 +7,8 @@ import { Card, CardContent } from './ui/card';
 import { useGameStore, TargetLevel } from '../../store/useGameStore'; // 引入重构后的 Store
 import { signInWithGoogle } from '../../lib/supabase';
 
-// 职业方向配置 (PRD Step 1)
-const CAREER_DIRECTIONS = [
-  { id: 'frontend', title: '前端开发', icon: <Layout />, desc: '构建极致的用户体验与视觉艺术' },
-  { id: 'backend', title: '后端架构', icon: <Database />, desc: '设计高并发、分布式的系统脊梁' },
-  { id: 'fullstack', title: '全栈独立开发', icon: <Terminal />, desc: '一人分饰多角，实现完整的产品愿景' },
-];
-
-// 目标段位配置 (PRD Step 2)
-const TARGET_LEVELS: { id: TargetLevel; title: string; desc: string }[] = [
-  { id: 'Junior', title: '初级 (Junior)', desc: '掌握核心语法，能够交付标准模块' },
-  { id: 'Mid', title: '中级 (Mid)', desc: '理解工程化体系，具备架构拆解能力' },
-  { id: 'Senior', title: '高级 (Senior)', desc: '驱动技术变革，主导复杂系统演进' },
-];
-
 export function CareerOnboarding() {
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState<string | null>(null);
   const [level, setLevel] = useState<TargetLevel | null>(null);
@@ -28,6 +16,18 @@ export function CareerOnboarding() {
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const { setTargetLevel } = useGameStore();
+
+  const careerDirections = [
+    { id: 'frontend', title: t('onboarding.careerDirections.frontend'), icon: <Layout />, desc: t('onboarding.careerDirections.frontendDesc') },
+    { id: 'backend', title: t('onboarding.careerDirections.backend'), icon: <Database />, desc: t('onboarding.careerDirections.backendDesc') },
+    { id: 'fullstack', title: t('onboarding.careerDirections.fullstack'), icon: <Terminal />, desc: t('onboarding.careerDirections.fullstackDesc') },
+  ];
+
+  const targetLevels: { id: TargetLevel; title: string; desc: string }[] = [
+    { id: 'Junior', title: t('onboarding.targetLevels.junior'), desc: t('onboarding.targetLevels.juniorDesc') },
+    { id: 'Mid', title: t('onboarding.targetLevels.mid'), desc: t('onboarding.targetLevels.midDesc') },
+    { id: 'Senior', title: t('onboarding.targetLevels.senior'), desc: t('onboarding.targetLevels.seniorDesc') },
+  ];
 
   // 最终确认：触发 AI 觉醒动效 (PRD 1.5s 延迟)
   const handleFinalConfirm = (selectedLevel: TargetLevel) => {
@@ -69,12 +69,12 @@ export function CareerOnboarding() {
             className="w-full max-w-4xl text-center z-10"
           >
             <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 mb-8 tracking-wider">
-              第一步：定锚你的职业维度
+              {t('onboarding.step1Title')}
             </h2>
 
             {/* Google OAuth 登录按钮 */}
             <div className="mb-12 flex flex-col items-center">
-              <p className="text-slate-400 text-sm mb-4">首先，请使用 Google 账户登录</p>
+              <p className="text-slate-400 text-sm mb-4">{t('onboarding.step1Desc')}</p>
               <motion.button
                 onClick={handleGoogleSignIn}
                 disabled={isSigningIn}
@@ -93,12 +93,12 @@ export function CareerOnboarding() {
                   {isSigningIn ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>连接中...</span>
+                      <span>{t('auth.signInConnecting')}</span>
                     </>
                   ) : (
                     <>
                       <Chrome className="w-5 h-5" />
-                      <span>使用 Google 登录</span>
+                      <span>{t('auth.signIn')}</span>
                     </>
                   )}
                 </div>
@@ -106,7 +106,7 @@ export function CareerOnboarding() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {CAREER_DIRECTIONS.map((item) => (
+              {careerDirections.map((item) => (
                 <Card 
                   key={item.id}
                   onClick={() => { setDirection(item.id); setStep(2); }}
@@ -135,10 +135,10 @@ export function CareerOnboarding() {
             className="w-full max-w-4xl text-center z-10"
           >
             <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 mb-8 tracking-wider">
-              第二步：锚定进化的终点
+              {t('onboarding.step2Title')}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {TARGET_LEVELS.map((item) => (
+              {targetLevels.map((item) => (
                 <Card 
                   key={item.id}
                   onClick={() => handleFinalConfirm(item.id)}
@@ -155,7 +155,7 @@ export function CareerOnboarding() {
               ))}
             </div>
             <Button variant="ghost" onClick={() => setStep(1)} className="text-slate-500 hover:text-white">
-              返回重选方向
+              {t('onboarding.backButton')}
             </Button>
           </motion.div>
         )}
@@ -186,9 +186,7 @@ export function CareerOnboarding() {
               className="h-1 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full mb-4"
             />
             
-            <p className="text-xl text-blue-100 font-medium tracking-widest animate-pulse">
-              AI 正在解析能力缺口，为你点亮专属星盘...
-            </p>
+            <p className="text-xl text-blue-100 font-medium tracking-widest animate-pulse">{t('onboarding.step2Desc')}</p>
           </motion.div>
         )}
       </AnimatePresence>

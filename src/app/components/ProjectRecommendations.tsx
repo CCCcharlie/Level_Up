@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -63,6 +64,7 @@ export function ProjectRecommendations({
   skillsData,
   onProjectComplete 
 }: ProjectRecommendationsProps) {
+  const { t } = useTranslation();
   const [activeProjects, setActiveProjects] = useState<string[]>([]);
   const [completedMilestones, setCompletedMilestones] = useState<Record<string, number[]>>({});
 
@@ -329,9 +331,9 @@ export function ProjectRecommendations({
 
   const getDifficultyText = (difficulty: string) => {
     switch (difficulty) {
-      case 'beginner': return '入门';
-      case 'intermediate': return '中级';
-      case 'advanced': return '高级';
+      case 'beginner': return t('customProject.difficultyBeginner');
+      case 'intermediate': return t('customProject.difficultyIntermediate');
+      case 'advanced': return t('customProject.difficultyAdvanced');
       default: return '';
     }
   };
@@ -339,7 +341,7 @@ export function ProjectRecommendations({
   const startProject = (projectId: string) => {
     if (!activeProjects.includes(projectId)) {
       setActiveProjects(prev => [...prev, projectId]);
-      toast.success('项目已启动！开始你的实战之旅吧 🚀');
+      toast.success(t('customProject.projectStarted'));
     }
   };
 
@@ -357,7 +359,7 @@ export function ProjectRecommendations({
         const project = projects.find(p => p.id === projectId);
         const milestone = project?.milestones[milestoneIndex];
         
-        toast.success(`完成里程碑！获得 ${milestone?.xp} XP`, {
+        toast.success(t('customProject.milestoneComplete', { xp: milestone?.xp ?? 0 }), {
           icon: '🎉',
         });
         
@@ -376,7 +378,7 @@ export function ProjectRecommendations({
     const completedCount = completedMilestones[projectId]?.length || 0;
     if (completedCount === project.milestones.length) {
       toast.success(
-        `恭喜完成项目！获得 ${project.xpReward} XP 和 ${project.skillPointsReward} 技能点！`,
+        t('customProject.projectComplete', { xp: project.xpReward, skillPoints: project.skillPointsReward }),
         {
           icon: '🏆',
           duration: 5000,
@@ -386,7 +388,7 @@ export function ProjectRecommendations({
       setActiveProjects(prev => prev.filter(id => id !== projectId));
       onProjectComplete?.(projectId, project.xpReward, project.skillPointsReward);
     } else {
-      toast.error('请先完成所有里程碑！');
+      toast.error(t('customProject.completeAllMilestones'));
     }
   };
 
@@ -531,7 +533,7 @@ export function ProjectRecommendations({
                 className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
               >
                 <Play className="w-4 h-4 mr-2" />
-                开始项目
+                {t('customProject.startProject')}
               </Button>
             ) : (
               <>
@@ -541,14 +543,14 @@ export function ProjectRecommendations({
                   className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
                 >
                   <Award className="w-4 h-4 mr-2" />
-                  完成项目
+                  {t('customProject.completeProject')}
                 </Button>
                 <Button
                   onClick={() => setActiveProjects(prev => prev.filter(id => id !== project.id))}
                   variant="outline"
                   className="border-red-500 text-red-500 hover:bg-red-500/10"
                 >
-                  放弃
+                  {t('customProject.abandonProject')}
                 </Button>
               </>
             )}
@@ -565,11 +567,9 @@ export function ProjectRecommendations({
         <div>
           <div className="flex items-center gap-3 mb-4">
             <FolderKanban className="w-6 h-6 text-yellow-400" />
-            <h3 className="text-2xl font-bold text-white">为你推荐的项目</h3>
+            <h3 className="text-2xl font-bold text-white">{t('customProject.title')}</h3>
           </div>
-          <p className="text-gray-400 mb-6">
-            基于你选择的职业方向，这些项目最适合你当前的学习阶段
-          </p>
+          <p className="text-gray-400 mb-6">{t('customProject.selectNodeForSuggestions')}</p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {recommendedProjects.map(project => renderProjectCard(project, true))}
           </div>
@@ -581,11 +581,9 @@ export function ProjectRecommendations({
         <div>
           <div className="flex items-center gap-3 mb-4">
             <FolderKanban className="w-6 h-6 text-blue-400" />
-            <h3 className="text-2xl font-bold text-white">探索更多项目</h3>
+            <h3 className="text-2xl font-bold text-white">{t('customProject.exploreMoreProjects')}</h3>
           </div>
-          <p className="text-gray-400 mb-6">
-            拓展技能边界，尝试不同领域的实战项目
-          </p>
+          <p className="text-gray-400 mb-6">{t('customProject.projectBonus')}</p>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {otherProjects.map(project => renderProjectCard(project, false))}
           </div>
@@ -598,13 +596,11 @@ export function ProjectRecommendations({
           <CardHeader>
             <CardTitle className="text-white flex items-center gap-2">
               <CheckCircle2 className="w-6 h-6 text-green-400" />
-              进行中的项目 ({activeProjects.length})
+              {t('customProject.activeProjects', { count: activeProjects.length })}
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-300">
-              继续努力！完成项目后可以获得丰厚的经验值和技能点奖励。
-            </p>
+            <p className="text-gray-300">{t('customProject.activeProjectsHint')}</p>
           </CardContent>
         </Card>
       )}

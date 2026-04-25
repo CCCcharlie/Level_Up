@@ -2,6 +2,7 @@
 
 import { animate, motion, useMotionValue } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState, type WheelEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { type RoadmapNode, type Task, useGameStore } from '../../store/useGameStore';
 import { Badge } from './ui/badge';
 import { Card } from './ui/card';
@@ -168,6 +169,7 @@ const getNodeTone = (nodeStatus: string, isActiveNode: boolean) => {
 const getTaskLabel = (task: Task) => task.title;
 
 const LearningPathFlow = () => {
+  const { t } = useTranslation();
   const {
     dynamicRoadmap,
     userTargetLevel,
@@ -215,7 +217,7 @@ const LearningPathFlow = () => {
         border: 'border-cyan-400/65 hover:border-cyan-300',
         halo: 'shadow-[0_0_40px_rgba(34,211,238,0.2)]',
         surface: 'bg-cyan-500/10',
-        label: '掌握底层原理',
+        label: t('learningPathFlow.masterTheory'),
         icon: <BrainCircuit className="h-4 w-4 text-cyan-300" />,
       };
     }
@@ -225,7 +227,7 @@ const LearningPathFlow = () => {
         border: 'border-rose-400/65 hover:border-rose-300',
         halo: 'shadow-[0_0_40px_rgba(251,113,133,0.2)]',
         surface: 'bg-rose-500/10',
-        label: '大厂面试必过',
+        label: t('learningPathFlow.passInterview'),
         icon: <FlameKindling className="h-4 w-4 text-rose-300" />,
       };
     }
@@ -234,9 +236,28 @@ const LearningPathFlow = () => {
       border: 'border-violet-400/65 hover:border-violet-300',
       halo: 'shadow-[0_0_40px_rgba(167,139,250,0.2)]',
       surface: 'bg-violet-500/10',
-      label: '拓宽技术视野',
+      label: t('learningPathFlow.broaden'),
       icon: <Orbit className="h-4 w-4 text-violet-300" />,
     };
+  };
+
+  const targetLevelLabel =
+    userTargetLevel === 'Junior'
+      ? t('learningPathFlow.juniorMode')
+      : userTargetLevel === 'Mid'
+        ? t('learningPathFlow.midMode')
+        : t('learningPathFlow.seniorMode');
+
+  const nodeStatusLabel = (nodeStatus: string, isActiveNode: boolean) => {
+    if (isActiveNode) {
+      return t('learningPathFlow.currentActiveNode');
+    }
+
+    if (nodeStatus === 'completed') {
+      return t('learningPathFlow.completedNode');
+    }
+
+    return t('learningPathFlow.lockedNode');
   };
 
   useEffect(() => {
@@ -315,10 +336,8 @@ const LearningPathFlow = () => {
 
         <div className="relative z-10 flex max-w-md flex-col items-center rounded-[28px] border border-slate-800/80 bg-slate-950/70 px-8 py-10 text-center shadow-[0_0_80px_rgba(0,0,0,0.45)] backdrop-blur-xl">
           <Rocket className="mb-6 h-16 w-16 text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.65)]" />
-          <h3 className="text-2xl font-semibold tracking-tight text-white">学习航线尚未校准</h3>
-          <p className="mt-3 text-sm leading-6 text-slate-400">
-            选择一个目标段位后，系统会生成专属路线图并将你带入星图画布。
-          </p>
+          <h3 className="text-2xl font-semibold tracking-tight text-white">{t('learningPathFlow.notSetUp')}</h3>
+          <p className="mt-3 text-sm leading-6 text-slate-400">{t('learningPathFlow.notSetUpDesc')}</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             {(['Junior', 'Mid', 'Senior'] as const).map((lvl) => (
               <Button
@@ -328,7 +347,7 @@ const LearningPathFlow = () => {
                 onClick={() => setTargetLevel('默认', lvl)}
                 className="border-slate-700 bg-slate-950/40 text-slate-100 hover:border-purple-400 hover:bg-purple-500/10"
               >
-                {lvl} 模式
+                {lvl === 'Junior' ? t('learningPathFlow.juniorMode') : lvl === 'Mid' ? t('learningPathFlow.midMode') : t('learningPathFlow.seniorMode')}
               </Button>
             ))}
           </div>
@@ -349,7 +368,7 @@ const LearningPathFlow = () => {
       <div className="absolute left-5 top-5 z-30 pointer-events-none rounded-full border border-purple-400/20 bg-slate-950/70 px-4 py-2 backdrop-blur-xl">
         <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.35em] text-purple-200/80">
           <Target className="h-3.5 w-3.5 text-purple-300" />
-          {userTargetLevel} 星图
+          {targetLevelLabel} {t('learningPathFlow.starMap')}
         </div>
       </div>
 
@@ -497,7 +516,7 @@ const LearningPathFlow = () => {
                     <div className="flex items-start justify-between gap-4">
                       <div className="space-y-3">
                         <Badge variant="outline" className={`w-fit border text-[10px] uppercase tracking-[0.35em] ${tone.badge}`}>
-                          Step {index + 1} · {node.status}
+                          {t('learningPathFlow.step')} {index + 1} · {nodeStatusLabel(node.status, isActiveNode)}
                         </Badge>
                         <h4 className={`text-xl font-semibold leading-none ${isActiveNode ? 'text-white' : 'text-slate-100'}`}>
                           {node.title}
@@ -529,7 +548,7 @@ const LearningPathFlow = () => {
 
                     <div className="mt-5 flex items-center justify-between border-t border-slate-800/80 pt-4">
                       <span className="text-[10px] uppercase tracking-[0.32em] text-purple-300/80">
-                        {isActiveNode ? '当前激活节点' : node.status === 'completed' ? '已完成节点' : '待解锁节点'}
+                        {nodeStatusLabel(node.status, isActiveNode)}
                       </span>
                       <Badge className="bg-purple-600/90 text-[10px] text-white">{node.requiredXP} XP</Badge>
                     </div>
@@ -544,7 +563,7 @@ const LearningPathFlow = () => {
                       className="animate-pulse rounded-xl border border-cyan-400/45 bg-cyan-400/10 px-4 py-2 text-[11px] font-medium tracking-wide text-cyan-100 shadow-[0_0_26px_rgba(34,211,238,0.22)]"
                       onMouseDown={(event) => event.stopPropagation()}
                     >
-                      AI 正在联想未来航线...
+                      {t('learningPathFlow.branchThinking')}
                     </div>
                   ) : (
                     <Button
@@ -559,7 +578,7 @@ const LearningPathFlow = () => {
                       className="h-8 rounded-xl border border-violet-400/50 bg-violet-500/14 px-4 text-[11px] font-medium text-violet-100 shadow-[0_0_24px_rgba(168,85,247,0.22)] hover:bg-violet-500/24"
                     >
                       <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-                      探索分支 (Explore Branches)
+                      {t('learningPathFlow.exploreBranch')}
                     </Button>
                   )}
                 </div>
@@ -580,8 +599,8 @@ const LearningPathFlow = () => {
           >
             <div className="mb-5 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-white">全息分叉推演完成</h3>
-                <p className="mt-1 text-xs text-slate-400">选择一条冒险路线，系统将把该分支挂载为当前节点的子节点。</p>
+                <h3 className="text-lg font-semibold text-white">{t('learningPathFlow.branchComplete')}</h3>
+                <p className="mt-1 text-xs text-slate-400">{t('learningPathFlow.branchCompleteDesc')}</p>
               </div>
               <Button
                 variant="outline"
@@ -589,7 +608,7 @@ const LearningPathFlow = () => {
                 className="border-slate-700 bg-transparent text-slate-300 hover:bg-slate-800"
                 onClick={() => setBranchParentNodeId(null)}
               >
-                暂不选择
+                {t('learningPathFlow.branchLater')}
               </Button>
             </div>
 
