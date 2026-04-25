@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import useGameStore, { type Task } from '../../store/useGameStore';
 import { Card } from './ui/card';
 import { Badge } from './ui/badge';
@@ -21,6 +22,7 @@ export default function EnhancedTaskCenter({
   allSkills,
   onTaskComplete,
 }: EnhancedTaskCenterProps) {
+  const { t } = useTranslation();
   const {
     dynamicRoadmap,
     activeRoadmapNodeId,
@@ -80,7 +82,7 @@ export default function EnhancedTaskCenter({
     });
 
     await trackProgress(activeNode.id, task.estimatedXP ?? 15, false);
-    toast.success('任务完成，进度已记录。');
+    toast.success(t('taskCenter.completed'));
   };
 
   const handleSubmitFeynman = async () => {
@@ -89,7 +91,7 @@ export default function EnhancedTaskCenter({
     }
 
     if (!feynmanAnswer.trim()) {
-      toast.error('请先概括核心逻辑，再提交校验。');
+      toast.error(t('taskCenter.summarizeFirst'));
       return;
     }
 
@@ -107,7 +109,7 @@ export default function EnhancedTaskCenter({
       });
 
       await trackProgress(activeNode.id, pendingFeynmanTask.estimatedXP ?? 15, false);
-      toast.success('费曼校验通过，已记录学习成果。');
+      toast.success(t('taskCenter.feynmanPassed'));
       setPendingFeynmanTask(null);
       setFeynmanAnswer('');
     } finally {
@@ -123,7 +125,7 @@ export default function EnhancedTaskCenter({
     const firstTargetTask = activeNode.tasks.find((task) => !task.subTasks || task.subTasks.length === 0);
 
     if (!firstTargetTask) {
-      toast.message('当前任务已经是可执行粒度，无需再次拆解。');
+      toast.message(t('taskCenter.noFurtherDecompose'));
       return;
     }
 
@@ -154,9 +156,9 @@ export default function EnhancedTaskCenter({
     return (
       <Card className="p-10 text-center bg-slate-900/60 border border-slate-700">
         <Target className="w-12 h-12 mx-auto mb-6 text-slate-400" />
-        <h3 className="text-xl font-semibold text-slate-200 mb-2">任务中心待激活</h3>
-        <p className="text-slate-400">请在左侧「学习路线图」中选择一个战略节点</p>
-        <p className="text-sm text-slate-500 mt-2">系统将自动生成针对性任务</p>
+        <h3 className="text-xl font-semibold text-slate-200 mb-2">{t('taskCenter.waitingActivation')}</h3>
+        <p className="text-slate-400">{t('taskCenter.selectNode')}</p>
+        <p className="text-sm text-slate-500 mt-2">{t('taskCenter.autoGenerate')}</p>
       </Card>
     );
   }
@@ -166,12 +168,12 @@ export default function EnhancedTaskCenter({
       <div className="border-b border-slate-700 pb-4">
         <div className="flex items-center gap-3 mb-2">
           <Badge variant="outline" className="border-amber-500/50 text-amber-500 bg-amber-500/5">
-            当前攻克节点
+            {t('taskCenter.currentNode')}
           </Badge>
           <h2 className="text-2xl font-bold text-slate-100">{activeNode.title}</h2>
         </div>
         <p className="flex items-start gap-2 text-[13px] leading-relaxed text-amber-400/90">
-          <span className="font-medium">直击痛点：</span>
+          <span className="font-medium">{t('taskCenter.hitPoint')}</span>
           {activeNode.focus}
         </p>
       </div>
@@ -180,8 +182,8 @@ export default function EnhancedTaskCenter({
         <Card className="border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-transparent p-4 shadow-[0_0_24px_rgba(245,158,11,0.12)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-medium text-amber-200">看起来有些棘手？试试将其拆解为微任务</p>
-              <p className="mt-1 text-xs text-amber-100/80">AI 会基于当前节点自动生成可快速执行的原子步骤。</p>
+              <p className="text-sm font-medium text-amber-200">{t('taskCenter.tricky')}</p>
+              <p className="mt-1 text-xs text-amber-100/80">{t('taskCenter.breakdown')}</p>
             </div>
             <Button
               size="sm"
@@ -190,7 +192,7 @@ export default function EnhancedTaskCenter({
               onClick={handleBreakdownSuggestion}
             >
               <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-              {isTriggeringBreakdown ? '拆解中...' : '调用 AI 拆解'}
+              {isTriggeringBreakdown ? t('taskCenter.decomposing') : t('taskCenter.callAI')}
             </Button>
           </div>
         </Card>
@@ -198,7 +200,7 @@ export default function EnhancedTaskCenter({
 
       <div>
         <h3 className="text-lg font-medium text-slate-200 mb-4">
-          本节点专属任务 ({activeNode.tasks.length})
+          {t('taskCenter.nodeExclusive')} ({activeNode.tasks.length})
         </h3>
 
         <StepBreakdown
@@ -216,7 +218,7 @@ export default function EnhancedTaskCenter({
             className="h-11 w-full border border-violet-300/40 bg-violet-500/25 text-violet-100 shadow-[0_0_28px_rgba(139,92,246,0.35)] hover:bg-violet-500/35"
           >
             <BrainCircuit className="mr-2 h-4 w-4" />
-            {isTriggeringReinforce ? '强化生成中...' : '开启深度强化 (Reinforce)'}
+            {isTriggeringReinforce ? t('taskCenter.reinforcing') : t('taskCenter.startReinforce')}
           </Button>
         </div>
       ) : null}
@@ -226,15 +228,15 @@ export default function EnhancedTaskCenter({
           <Card className="w-full max-w-xl border border-emerald-500/30 bg-slate-900/95 p-5 shadow-[0_0_28px_rgba(16,185,129,0.2)]">
             <div className="space-y-4">
               <div>
-                <h4 className="text-lg font-semibold text-emerald-200">费曼校验</h4>
-                <p className="mt-1 text-sm text-emerald-100/80">请概括此节点的核心逻辑</p>
-                <p className="mt-2 text-xs text-slate-400">任务：{pendingFeynmanTask.title}</p>
+                  <h4 className="text-lg font-semibold text-emerald-200">{t('taskCenter.feynman')}</h4>
+                  <p className="mt-1 text-sm text-emerald-100/80">{t('taskCenter.feynmanPrompt')}</p>
+                  <p className="mt-2 text-xs text-slate-400">{t('taskCenter.feynmanTask')}{pendingFeynmanTask.title}</p>
               </div>
 
               <Textarea
                 value={feynmanAnswer}
                 onChange={(event) => setFeynmanAnswer(event.target.value)}
-                placeholder="用你自己的话总结原理、边界与落地方式..."
+                  placeholder={t('taskCenter.feynmanDesc')}
                 className="min-h-32 border-emerald-500/30 bg-slate-950/70 text-slate-100 placeholder:text-slate-500"
               />
 
@@ -247,14 +249,14 @@ export default function EnhancedTaskCenter({
                     setFeynmanAnswer('');
                   }}
                 >
-                  稍后再写
+                  {t('taskCenter.laterWrite')}
                 </Button>
                 <Button
                   disabled={isSubmittingFeynman}
                   className="bg-emerald-600 text-white hover:bg-emerald-500"
                   onClick={handleSubmitFeynman}
                 >
-                  {isSubmittingFeynman ? '提交中...' : '提交校验'}
+                  {isSubmittingFeynman ? t('common.loading') : t('taskCenter.submitValidation')}
                 </Button>
               </div>
             </div>

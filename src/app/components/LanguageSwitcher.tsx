@@ -1,4 +1,3 @@
-import { useTranslation } from 'react-i18next';
 import { Languages } from 'lucide-react';
 import useGameStore from '../../store/useGameStore';
 import { Button } from './ui/button';
@@ -10,7 +9,6 @@ import {
 } from './ui/dropdown-menu';
 
 export function LanguageSwitcher() {
-  const { i18n } = useTranslation();
   const { language, setLanguage } = useGameStore();
 
   return (
@@ -27,14 +25,22 @@ export function LanguageSwitcher() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuItem
-          onClick={() => setLanguage('zh')}
+          onSelect={() => {
+            const lang = 'zh';
+            console.log('Target Language:', lang);
+            setLanguage(lang);
+          }}
           className={language === 'zh' ? 'bg-slate-800' : ''}
         >
           <span>中文 (Chinese)</span>
           {language === 'zh' && <span className="ml-auto text-xs">✓</span>}
         </DropdownMenuItem>
         <DropdownMenuItem
-          onClick={() => setLanguage('en')}
+          onSelect={() => {
+            const lang = 'en';
+            console.log('Target Language:', lang);
+            setLanguage(lang);
+          }}
           className={language === 'en' ? 'bg-slate-800' : ''}
         >
           <span>English</span>

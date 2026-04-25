@@ -1409,6 +1409,11 @@ export const useGameStore = create<GameState>()(
       partialize: (state) => ({
         language: state.language,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.language) {
+          void i18n.changeLanguage(state.language);
+        }
+      },
     }
   )
 );
