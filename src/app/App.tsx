@@ -6,6 +6,7 @@ import { StarConstellationSkillTree } from './components/StarConstellationSkillT
 import  EnhancedTaskCenter  from './components/EnhancedTaskCenter';
 import  CustomProjectSystem  from './components/CustomProjectSystem';
 import EquipmentSystem from './components/EquipmentSystem';
+import { LanguageSwitcher } from './components/LanguageSwitcher';
 import { ScrollArea } from './components/ui/scroll-area';
 
 
@@ -197,7 +198,9 @@ export default function App() {
                     <p className="truncate text-[11px] text-slate-400">{currentUser?.email || '未绑定邮箱'}</p>
                   </div>
                 </div>
-                <Button
+                <div className="flex items-center gap-2">
+                  <LanguageSwitcher />
+                  <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 border border-slate-800 bg-slate-900/70 text-slate-300 hover:bg-slate-800 hover:text-white"
@@ -207,7 +210,8 @@ export default function App() {
                   aria-label="退出登录"
                 >
                   <LogOut className="h-4 w-4" />
-                </Button>
+                  </Button>
+                </div>
               </div>
 
               <div className="flex items-center gap-3">

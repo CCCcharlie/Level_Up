@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
+import i18n from '../i18n/config';
 import {
   buildExtensionPrompt,
   generateNodePrompt,
@@ -675,6 +677,9 @@ interface GameState {
   // 4. 装备系统
   equipment: Equipment[];
 
+  // 5. 国际化 (i18n)
+  language: 'zh' | 'en';
+
   // --- Actions ---
   addExp: (amount: number) => void;
   fetchUserData: () => Promise<void>;
@@ -690,13 +695,16 @@ interface GameState {
   breakdownTask: (taskId: string) => Promise<void>;
   equipItem: (id: string, slot: Equipment['equippedSlot']) => void;
   unequipItem: (id: string) => void;
+  setLanguage: (lang: 'zh' | 'en') => void;
   resetOnboarding: () => void;
   signOut: () => Promise<void>;
 }
 
 // --- Store 实现 ---
 
-export const useGameStore = create<GameState>((set, get) => ({
+export const useGameStore = create<GameState>()(
+  persist(
+    (set, get) => ({
   // 初始状态
   careerDirection: null,
   userTargetLevel: 'Junior',
@@ -714,6 +722,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   dynamicRoadmap: [],
   activeRoadmapNodeId: null,
   lastAddedBranchNodeId: null,
+  language: 'zh',
   equipment: [
     {
       id: 'e1', name: '神经连结头盔', type: 'armor', rarity: 'rare', category: '硬件',
@@ -1339,6 +1348,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     }));
   },
 
+  // 语言切换
+  setLanguage: (lang: 'zh' | 'en') => {
+    set({ language: lang });
+    void i18n.changeLanguage(lang);
+  },
+
   // 重置系统
   resetOnboarding: () => set({ 
     isOnboarded: false, 
@@ -1388,6 +1403,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       console.error('[useGameStore:signOut] Failed to sign out:', error);
     }
   },
-}));
+    }),
+    {
+      name: 'game-store',
+      partialize: (state) => ({
+        language: state.language,
+      }),
+    }
+  )
+);
 
 export default useGameStore;
