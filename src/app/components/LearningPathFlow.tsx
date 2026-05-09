@@ -286,7 +286,8 @@ const LearningPathFlow = () => {
     };
   }, [activeNode, scale, x, y]);
 
-  const handleViewportWheel = (event: WheelEvent<HTMLDivElement>) => {
+  const handleViewportWheel = (event: Event) => {
+    if (!(event instanceof WheelEvent)) return;
     event.preventDefault();
 
     const viewport = viewportRef.current;
@@ -328,6 +329,18 @@ const LearningPathFlow = () => {
     }, 220);
   };
 
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const handleNativeWheel = (event: Event) => {
+      handleViewportWheel(event);
+    };
+
+    viewport.addEventListener('wheel', handleNativeWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', handleNativeWheel);
+  }, [handleViewportWheel]);
+
   if (!dynamicRoadmap || dynamicRoadmap.length === 0) {
     return (
       <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-[#050814] text-white">
@@ -359,8 +372,7 @@ const LearningPathFlow = () => {
   return (
     <div
       ref={viewportRef}
-      onWheel={handleViewportWheel}
-      className="relative h-full w-full overflow-hidden select-none bg-[#050814] text-white"
+      className="relative h-full w-full overflow-hidden select-none touch-none bg-[#050814] text-white"
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(168,85,247,0.2),transparent_26%),radial-gradient(circle_at_82%_20%,rgba(59,130,246,0.14),transparent_24%),radial-gradient(circle_at_50%_78%,rgba(16,185,129,0.08),transparent_22%)]" />
       <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(148,163,184,0.11)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.11)_1px,transparent_1px)] [background-size:104px_104px]" />
@@ -387,7 +399,7 @@ const LearningPathFlow = () => {
           x.set(lastSafeOffsetRef.current.x);
           y.set(lastSafeOffsetRef.current.y);
         }}
-        className="absolute left-0 top-0 cursor-grab active:cursor-grabbing"
+        className="absolute left-0 top-0 cursor-grab active:cursor-grabbing touch-none"
         style={{
           x,
           y,
