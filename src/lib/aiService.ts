@@ -40,6 +40,27 @@ export const ROADMAP_PROMPT = [
 type PromptMode = 'breakdown' | 'reinforce' | 'roadmap';
 type TargetLevel = 'Junior' | 'Mid' | 'Senior';
 
+export interface OnboardingChecklistTask {
+  title: string;
+  type: 'concept' | 'project' | 'leetcode' | 'feynman';
+  estimatedXP?: number;
+}
+
+export interface OnboardingChecklistModule {
+  title: string;
+  focus: string;
+  summary: string;
+  tasks: OnboardingChecklistTask[];
+}
+
+export interface OnboardingChecklistResponse {
+  detectedDirection?: string;
+  detectedLevel?: TargetLevel;
+  headline?: string;
+  checklist?: OnboardingChecklistModule[];
+  followUp?: string;
+}
+
 export interface RoadmapContext {
   mode: PromptMode;
   targetLevel?: TargetLevel;
@@ -111,6 +132,28 @@ export const generateNodePrompt = (context: RoadmapContext) => {
     ].join('\n'),
   };
 };
+
+export const buildOnboardingPrompt = (intent: string, inferredDirection: string, inferredLevel: TargetLevel) => ({
+  systemPrompt: [
+    '你是一个意图驱动的学习大盘生成器。',
+    '你的目标是围绕默认核心考纲「大厂技术面试通关」生成 Tier-1 Checklist。',
+    '每个模块必须是段落级聚合，标题要像【LeetCode 精选】、【字节常考点】、【项目面试必杀】这样的摘要，不要逐字拆解。',
+    '每个模块都必须包含 title、focus、summary、tasks 字段。',
+    'tasks 至少 2 个，类型只能是 concept、project、leetcode、feynman。',
+    '最后必须带出一个追问：是否需要切换到独立开发者或自定义其他方向？',
+    '只允许输出严格 JSON，不要 Markdown、不要解释、不要前后缀文本。',
+    'JSON 结构必须为：{"detectedDirection":"string","detectedLevel":"Junior|Mid|Senior","headline":"string","checklist":[{"title":"string","focus":"string","summary":"string","tasks":[{"title":"string","type":"concept|project|leetcode|feynman","estimatedXP":number}]}],"followUp":"string"}.',
+  ].join('\n'),
+  userPrompt: [
+    `用户输入：${intent}`,
+    `系统推断方向：${inferredDirection}`,
+    `系统推断等级：${inferredLevel}`,
+    '请生成 3 个 Tier-1 Checklist 模块，并让模块标题保持段落级聚合。',
+    '每个模块任务要偏向可直接执行的面试训练、题目练习或项目面试表达。',
+    '默认核心考纲：大厂技术面试通关。',
+    '追问文案必须明确询问用户是否要切换到独立开发者或自定义其他方向。',
+  ].join('\n'),
+});
 
 interface AIJsonResponse {
   subTasks?: unknown;

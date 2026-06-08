@@ -198,6 +198,21 @@ const cloneRoadmapSeed = (level: TargetLevel): RoadmapNode[] =>
     tasks: node.tasks.map((task) => cloneTaskTree(task)),
   }));
 
+const cloneCustomRoadmapSeed = (nodes: RoadmapNode[]): RoadmapNode[] =>
+  nodes.map((node, index) => ({
+    ...node,
+    id: node.id || `onboarding-node-${index + 1}`,
+    parentId: node.parentId ?? null,
+    status: node.status ?? (index === 0 ? 'current' : 'locked'),
+    reinforcementLevel: typeof node.reinforcementLevel === 'number' ? node.reinforcementLevel : 0,
+    isReinforcing: typeof node.isReinforcing === 'boolean' ? node.isReinforcing : false,
+    tasks: node.tasks.map((task, taskIndex) => cloneTaskTree({
+      ...task,
+      id: task.id || createTaskId(node.id || `onboarding-node-${index + 1}`, task.title, taskIndex + 1),
+      referenceId: node.id || `onboarding-node-${index + 1}`,
+    })),
+  }));
+
 const flattenTaskTree = (task: Task): Task[] => [
   task,
   ...(task.subTasks?.flatMap((subTask) => flattenTaskTree(subTask)) ?? []),
@@ -684,7 +699,7 @@ interface GameState {
   addExp: (amount: number) => void;
   fetchUserData: () => Promise<void>;
   setSkillPoints: (skillPoints: number) => void;
-  setTargetLevel: (direction: string, level: TargetLevel) => void;
+  setTargetLevel: (direction: string, level: TargetLevel, roadmapSeed?: RoadmapNode[]) => void;
   extendRoadmapWithAI: () => Promise<void>;
   generateBranchSuggestions: (nodeId: string) => Promise<void>;
   addBranchToRoadmap: (parentNodeId: string, chosenNode: RoadmapNode) => Promise<void>;
@@ -886,8 +901,8 @@ export const useGameStore = create<GameState>()(
   setSkillPoints: (skillPoints) => set({ skillPoints }),
 
   // 核心重构：双重定锚方法 (PRD 3.1)
-  setTargetLevel: (direction, level) => {
-    const nextRoadmap = cloneRoadmapSeed(level);
+  setTargetLevel: (direction, level, roadmapSeed) => {
+    const nextRoadmap = roadmapSeed && roadmapSeed.length > 0 ? cloneCustomRoadmapSeed(roadmapSeed) : cloneRoadmapSeed(level);
     const nextGapNodes = nextRoadmap.flatMap((node) => node.tasks.map((task) => task.id));
     const now = new Date().toISOString();
 
