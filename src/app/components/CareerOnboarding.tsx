@@ -13,12 +13,12 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Input } from './ui/input';
 import {
   buildOnboardingPrompt,
   requestAI,
   type OnboardingChecklistModule,
+  type OnboardingChecklistQuickReply,
   type OnboardingChecklistResponse,
 } from '../../lib/aiService';
 import { signInWithGoogle } from '../../lib/supabase';
@@ -39,6 +39,13 @@ const TARGET_LEVEL_META: Record<TargetLevel, { label: string; accent: string }> 
 
 const TASK_TYPES = ['concept', 'project', 'leetcode', 'feynman'] as const;
 const DEFAULT_INTENT = '成为初级前端/移动开发工程师';
+
+type InlineQuickReply = {
+  id: string;
+  label: string;
+  value: string;
+  intent?: string;
+};
 
 const slugify = (value: string) =>
   value
@@ -82,6 +89,34 @@ const normalizeOnboardingTaskType = (value: unknown): OnboardingChecklistModule[
   typeof value === 'string' && TASK_TYPES.includes(value as (typeof TASK_TYPES)[number])
     ? (value as OnboardingChecklistModule['tasks'][number]['type'])
     : 'concept';
+
+const normalizeQuickReplies = (quickReplies: OnboardingChecklistResponse['quickReplies']): InlineQuickReply[] => {
+  if (!Array.isArray(quickReplies)) {
+    return [];
+  }
+
+  return quickReplies
+    .map((reply, index): InlineQuickReply | null => {
+      if (typeof reply === 'string') {
+        const trimmed = reply.trim();
+        return trimmed ? { id: `quick-reply-${index + 1}`, label: trimmed, value: trimmed } : null;
+      }
+
+      const candidate = reply as OnboardingChecklistQuickReply;
+      if (!candidate.label?.trim()) {
+        return null;
+      }
+
+      return {
+        id: candidate.id || `quick-reply-${index + 1}`,
+        label: candidate.label,
+        value: candidate.value || candidate.label,
+        intent: candidate.intent,
+      };
+    })
+    .filter((reply): reply is InlineQuickReply => Boolean(reply))
+    .slice(0, 4);
+};
 
 const buildFallbackChecklist = (direction: string, level: TargetLevel): OnboardingChecklistModule[] => {
   const levelBoost = level === 'Senior' ? 120 : level === 'Mid' ? 80 : 40;
@@ -127,13 +162,65 @@ const buildFallbackChecklist = (direction: string, level: TargetLevel): Onboardi
   ];
 };
 
+const buildChecklistFromFlatTasks = (
+  response: OnboardingChecklistResponse,
+  fallbackDirection: string,
+  fallbackLevel: TargetLevel
+): OnboardingChecklistModule[] | null => {
+  const rawTasks = Array.isArray(response.tasks) && response.tasks.length > 0 ? response.tasks : response.steps;
+
+  if (!Array.isArray(rawTasks) || rawTasks.length === 0) {
+    return null;
+  }
+
+  const fallbackChecklist = buildFallbackChecklist(fallbackDirection, fallbackLevel);
+
+  return rawTasks.slice(0, 5).map((task, index) => {
+    const fallbackModule = fallbackChecklist[index % fallbackChecklist.length];
+    const taskTitle = typeof task.title === 'string' && task.title.trim() ? task.title : fallbackModule.tasks[0].title;
+    const taskSummary =
+      typeof task.description === 'string' && task.description.trim()
+        ? task.description
+        : typeof task.summary === 'string' && task.summary.trim()
+          ? task.summary
+          : fallbackModule.summary;
+
+    return {
+      title: taskTitle,
+      focus: taskSummary,
+      summary: taskSummary,
+      tasks: [
+        {
+          title: taskTitle,
+          summary: taskSummary,
+          description: taskSummary,
+          type: normalizeOnboardingTaskType(task.type),
+          estimatedXP:
+            typeof task.estimatedXP === 'number' && Number.isFinite(task.estimatedXP)
+              ? Math.max(5, Math.round(task.estimatedXP))
+              : fallbackModule.tasks[0].estimatedXP,
+        },
+      ],
+    };
+  });
+};
+
 const normalizeChecklist = (
   response: OnboardingChecklistResponse,
   fallbackDirection: string,
   fallbackLevel: TargetLevel
-): { direction: string; level: TargetLevel; headline: string; checklist: OnboardingChecklistModule[]; followUp: string } => {
+): {
+  direction: string;
+  level: TargetLevel;
+  headline: string;
+  checklist: OnboardingChecklistModule[];
+  followUp: string;
+  quickReplies: InlineQuickReply[];
+} => {
   const fallbackChecklist = buildFallbackChecklist(fallbackDirection, fallbackLevel);
-  const rawChecklist = Array.isArray(response.checklist) ? response.checklist : fallbackChecklist;
+  const rawChecklist = Array.isArray(response.checklist)
+    ? response.checklist
+    : buildChecklistFromFlatTasks(response, fallbackDirection, fallbackLevel) ?? fallbackChecklist;
 
   const checklist = rawChecklist.slice(0, 3).map((module, index) => {
     const fallbackModule = fallbackChecklist[index] ?? fallbackChecklist[0];
@@ -166,9 +253,12 @@ const normalizeChecklist = (
     headline: typeof response.headline === 'string' && response.headline.trim() ? response.headline : '大厂技术面试通关',
     checklist,
     followUp:
-      typeof response.followUp === 'string' && response.followUp.trim()
-        ? response.followUp
+      typeof response.followUpQuestion === 'string' && response.followUpQuestion.trim()
+        ? response.followUpQuestion
+        : typeof response.followUp === 'string' && response.followUp.trim()
+          ? response.followUp
         : "是否需要切换到'独立开发者'或自定义其他方向？",
+    quickReplies: normalizeQuickReplies(response.quickReplies),
   };
 };
 
@@ -204,17 +294,20 @@ export function CareerOnboarding() {
   const [revealedCount, setRevealedCount] = useState(0);
   const [headline, setHeadline] = useState('大厂技术面试通关');
   const [followUp, setFollowUp] = useState("是否需要切换到'独立开发者'或自定义其他方向？");
+  const [quickReplies, setQuickReplies] = useState<InlineQuickReply[]>([]);
   const [detectedDirection, setDetectedDirection] = useState('前端开发');
   const [selectedLevel, setSelectedLevel] = useState<TargetLevel>('Junior');
   const [customDirection, setCustomDirection] = useState('独立开发者');
-  const [questionOpen, setQuestionOpen] = useState(false);
 
   const currentUser = useGameStore((state) => state.currentUser);
   const setTargetLevel = useGameStore((state) => state.setTargetLevel);
 
   const activeChecklist = useMemo(() => checklist.slice(0, revealedCount), [checklist, revealedCount]);
+  const shouldShowFollowUp = checklist.length > 0 && revealedCount >= checklist.length && !isGenerating;
   const promptTone = TARGET_LEVEL_META[selectedLevel];
   const revealTimers = useRef<number[]>([]);
+  const scrollAnchorRef = useRef<HTMLDivElement>(null);
+  const userScrollLockUntilRef = useRef(0);
 
   useEffect(() => {
     revealTimers.current.forEach((timer) => window.clearTimeout(timer));
@@ -239,6 +332,42 @@ export function CareerOnboarding() {
     };
   }, [checklist, isGenerating]);
 
+  useEffect(() => {
+    const lockManualScroll = () => {
+      userScrollLockUntilRef.current = Date.now() + 1400;
+    };
+
+    const handleWheel = (event: WheelEvent) => {
+      if (event.deltaY < 0) {
+        lockManualScroll();
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('touchmove', lockManualScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('touchmove', lockManualScroll);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shouldShowFollowUp || !scrollAnchorRef.current) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (Date.now() < userScrollLockUntilRef.current) {
+        return;
+      }
+
+      scrollAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 120);
+
+    return () => window.clearTimeout(timer);
+  }, [shouldShowFollowUp]);
+
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     try {
@@ -259,8 +388,8 @@ export function CareerOnboarding() {
 
     setIntent(trimmedIntent);
     setIsGenerating(true);
-    setQuestionOpen(false);
     setChecklist([]);
+    setQuickReplies([]);
     setRevealedCount(0);
 
     const fallbackDirection = detectDirection(trimmedIntent);
@@ -277,6 +406,7 @@ export function CareerOnboarding() {
       setHeadline(normalized.headline);
       setChecklist(normalized.checklist);
       setFollowUp(normalized.followUp);
+      setQuickReplies(normalized.quickReplies);
       setDetectedDirection(normalized.direction);
       setSelectedLevel(normalized.level);
     } catch (error) {
@@ -287,18 +417,17 @@ export function CareerOnboarding() {
       setHeadline('大厂技术面试通关');
       setChecklist(fallbackChecklist);
       setFollowUp("是否需要切换到'独立开发者'或自定义其他方向？");
+      setQuickReplies([]);
       setDetectedDirection(fallbackDirection);
       setSelectedLevel(fallbackLevel);
       setCustomDirection(fallbackDirection);
     } finally {
       setIsGenerating(false);
-      setQuestionOpen(true);
     }
   };
 
   const commitOnboarding = (direction: string, level: TargetLevel) => {
     const roadmap = buildRoadmapFromChecklist(checklist.length > 0 ? checklist : buildFallbackChecklist(direction, level));
-    setQuestionOpen(false);
     setIsBooting(true);
 
     window.setTimeout(() => {
@@ -306,12 +435,30 @@ export function CareerOnboarding() {
     }, 900);
   };
 
-  const handleConfirmCurrent = () => commitOnboarding(detectedDirection, selectedLevel);
-  const handleSwitchToIndie = () => commitOnboarding('独立开发者', selectedLevel);
   const handleCustomDirection = () => commitOnboarding(customDirection.trim() || detectedDirection, selectedLevel);
 
+  const handleQuickReply = (reply: InlineQuickReply) => {
+    const replyIntent = reply.intent?.toLowerCase() ?? '';
+    const replyText = `${reply.label} ${reply.value}`.toLowerCase();
+
+    if (replyIntent === 'confirm' || /确认|合适|yes|confirm/.test(replyText)) {
+      commitOnboarding(detectedDirection, selectedLevel);
+      return;
+    }
+
+    if (replyIntent === 'adjust_level' || /senior|高级|资深|架构/.test(replyText)) {
+      setSelectedLevel('Senior');
+    } else if (/mid|中级|进阶/.test(replyText)) {
+      setSelectedLevel('Mid');
+    } else if (/junior|初级|beginner/.test(replyText)) {
+      setSelectedLevel('Junior');
+    }
+
+    setCustomDirection(reply.value);
+  };
+
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050816] px-4 py-8 text-white">
+    <div className="relative flex min-h-screen items-start justify-center overflow-x-hidden bg-[#050816] px-4 py-8 text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_12%,rgba(56,189,248,0.24),transparent_36%),radial-gradient(circle_at_18%_82%,rgba(168,85,247,0.14),transparent_30%),radial-gradient(circle_at_86%_22%,rgba(251,191,36,0.12),transparent_26%)]" />
       <div className="pointer-events-none absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(148,163,184,0.08)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.08)_1px,transparent_1px)] [background-size:96px_96px]" />
 
@@ -457,6 +604,59 @@ export function CareerOnboarding() {
                   {headline}
                 </div>
               ) : null}
+
+              <AnimatePresence>
+                {shouldShowFollowUp ? (
+                  <motion.div
+                    key="inline-follow-up"
+                    initial={{ opacity: 0, y: 22 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 12 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    className="mt-6 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 p-5 text-left shadow-[0_0_45px_rgba(34,211,238,0.12)]"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-300/30 bg-cyan-300/10">
+                        <Sparkles className="h-5 w-5 text-cyan-200" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] uppercase tracking-[0.35em] text-cyan-100/70">AI FOLLOW-UP</p>
+                        <p className="mt-2 text-sm leading-6 text-cyan-50">{followUp}</p>
+
+                        {quickReplies.length > 0 ? (
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {quickReplies.map((reply) => (
+                              <button
+                                key={reply.id}
+                                type="button"
+                                onClick={() => handleQuickReply(reply)}
+                                className="rounded-full border border-cyan-300/25 bg-slate-950/50 px-3 py-2 text-sm text-cyan-50 transition hover:border-cyan-200/60 hover:bg-cyan-300/10"
+                              >
+                                {reply.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto]">
+                          <Input
+                            value={customDirection}
+                            onChange={(event) => setCustomDirection(event.target.value)}
+                            placeholder="补充方向或约束，例如：独立开发者 / AI 产品工程师"
+                            className="h-12 rounded-2xl border-white/10 bg-slate-950/50 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400/40"
+                          />
+                          <Button onClick={handleCustomDirection} className="h-12 rounded-2xl bg-cyan-300 px-6 text-slate-950 hover:bg-cyan-200">
+                            生成任务
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div ref={scrollAnchorRef} className="h-1 w-full" />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </div>
 
             <AnimatePresence>
@@ -519,64 +719,6 @@ export function CareerOnboarding() {
         ) : null}
       </AnimatePresence>
 
-      <Dialog open={questionOpen && !isGenerating && !isBooting} onOpenChange={setQuestionOpen}>
-        <DialogContent className="border-white/10 bg-slate-950 text-white shadow-[0_40px_120px_rgba(2,6,23,0.75)] sm:max-w-[560px]">
-          <DialogHeader>
-            <DialogTitle className="text-2xl">{followUp}</DialogTitle>
-            <DialogDescription className="text-slate-400">
-              当前识别为 {detectedDirection} · {TARGET_LEVEL_META[selectedLevel].label}。你可以直接确认，或切换为独立开发者并自定义方向。
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              {(['Junior', 'Mid', 'Senior'] as const).map((level) => (
-                <button
-                  key={level}
-                  type="button"
-                  onClick={() => setSelectedLevel(level)}
-                  className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                    selectedLevel === level
-                      ? 'border-cyan-300/60 bg-cyan-400/10 text-white shadow-[0_0_30px_rgba(34,211,238,0.14)]'
-                      : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
-                  }`}
-                >
-                  <div className="text-xs uppercase tracking-[0.35em] text-slate-500">Target</div>
-                  <div className="mt-1 text-sm font-medium">{TARGET_LEVEL_META[level].label}</div>
-                </button>
-              ))}
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Button onClick={handleConfirmCurrent} className="justify-center bg-cyan-300 text-slate-950 hover:bg-cyan-200">
-                确认当前方向
-              </Button>
-              <Button onClick={handleSwitchToIndie} variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10">
-                切换到独立开发者
-              </Button>
-              <Button onClick={handleCustomDirection} variant="secondary" className="bg-white text-slate-950 hover:bg-slate-200">
-                应用自定义方向
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-[0.4em] text-slate-500">自定义方向</p>
-              <Input
-                value={customDirection}
-                onChange={(event) => setCustomDirection(event.target.value)}
-                placeholder="例如：独立开发者 / 移动开发 / AI 产品工程师"
-                className="h-12 rounded-2xl border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus-visible:ring-cyan-400/40"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setQuestionOpen(false)} className="text-slate-300 hover:bg-white/5 hover:text-white">
-              稍后再说
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
