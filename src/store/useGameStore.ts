@@ -12,8 +12,11 @@ import {
 import { INITIAL_ROADMAPS } from '../data/roadmapTemplates';
 import { ensureUserProfile, supabase } from '../lib/supabase';
 import type { ProgressRow, RoadmapRow, UserRow } from '../types/database';
+import type { OnboardingChecklistResponse } from '../lib/aiService';
 
 // --- 类型定义 ---
+
+export type AIInteractionState = 'IDLE' | 'ANALYZING' | 'AWAITING_CONFIRMATION' | 'CONFIRMED';
 
 export type TargetLevel = 'Junior' | 'Mid' | 'Senior';
 
@@ -695,7 +698,13 @@ interface GameState {
   // 5. 国际化 (i18n)
   language: 'zh' | 'en';
 
+  // 6. AI 交互状态
+  aiInteractionState: AIInteractionState;
+  unconfirmedChecklist: OnboardingChecklistResponse | null;
+
   // --- Actions ---
+  setAiInteractionState: (state: AIInteractionState) => void;
+  setUnconfirmedChecklist: (checklist: OnboardingChecklistResponse | null) => void;
   addExp: (amount: number) => void;
   fetchUserData: () => Promise<void>;
   setSkillPoints: (skillPoints: number) => void;
@@ -738,6 +747,8 @@ export const useGameStore = create<GameState>()(
   activeRoadmapNodeId: null,
   lastAddedBranchNodeId: null,
   language: 'zh',
+  aiInteractionState: 'IDLE',
+  unconfirmedChecklist: null,
   equipment: [
     {
       id: 'e1', name: '神经连结头盔', type: 'armor', rarity: 'rare', category: '硬件',

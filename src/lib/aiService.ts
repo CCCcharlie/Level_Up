@@ -39,27 +39,24 @@ export const ROADMAP_PROMPT = [
 
 type PromptMode = 'breakdown' | 'reinforce' | 'roadmap';
 type TargetLevel = 'Junior' | 'Mid' | 'Senior';
+export type OnboardingExperienceLevel = 'Beginner' | 'Intermediate' | 'Advanced';
 
-export interface OnboardingChecklistTask {
+export interface OnboardingChecklistStep {
   title: string;
+  summary: string;
   type: 'concept' | 'project' | 'leetcode' | 'feynman';
   estimatedXP?: number;
 }
 
-export interface OnboardingChecklistModule {
-  title: string;
-  focus: string;
-  summary: string;
-  tasks: OnboardingChecklistTask[];
-}
-
 export interface OnboardingChecklistResponse {
   detectedDirection?: string;
-  detectedLevel?: TargetLevel;
+  inferredLevel: OnboardingExperienceLevel;
   headline?: string;
-  checklist?: OnboardingChecklistModule[];
-  followUp?: string;
+  steps: OnboardingChecklistStep[];
+  followUpQuestion: string;
 }
+
+export interface OnboardingChecklistDraft extends OnboardingChecklistResponse {}
 
 export interface RoadmapContext {
   mode: PromptMode;
@@ -133,31 +130,156 @@ export const generateNodePrompt = (context: RoadmapContext) => {
   };
 };
 
-export const buildOnboardingPrompt = (intent: string, inferredDirection: string, inferredLevel: TargetLevel) => ({
+export const buildOnboardingPrompt = (
+  intent: string,
+  inferredDirection: string,
+  inferredLevel: OnboardingExperienceLevel = 'Beginner'
+) => ({
   systemPrompt: [
     '你是一个意图驱动的学习大盘生成器。',
-    '你的目标是围绕默认核心考纲「大厂技术面试通关」生成 Tier-1 Checklist。',
-    '每个模块必须是段落级聚合，标题要像【LeetCode 精选】、【字节常考点】、【项目面试必杀】这样的摘要，不要逐字拆解。',
-    '每个模块都必须包含 title、focus、summary、tasks 字段。',
-    'tasks 至少 2 个，类型只能是 concept、project、leetcode、feynman。',
-    '最后必须带出一个追问：是否需要切换到独立开发者或自定义其他方向？',
+    '你的任务必须严格遵守 Minimum Viable Completeness 原则：只输出达成目标所需的最少步骤，不多不少。',
+    '如果用户没有明确说明难度或经验等级，默认把上下文视为 Beginner。',
+    '你需要在输出中提供一个简短 followUpQuestion，用于确认当前等级判断是否合适，或者追问用户的具体细节。',
+    '你还需要提供一个 quickReplies 数组，包含 2-4 个简短的快捷回复选项，让用户可以直接点击回复你的追问。',
+    '每个步骤必须足够具体、可执行，并且聚焦于直接推进目标达成。',
+    '步骤类型只能是 concept、project、leetcode、feynman。',
     '只允许输出严格 JSON，不要 Markdown、不要解释、不要前后缀文本。',
-    'JSON 结构必须为：{"detectedDirection":"string","detectedLevel":"Junior|Mid|Senior","headline":"string","checklist":[{"title":"string","focus":"string","summary":"string","tasks":[{"title":"string","type":"concept|project|leetcode|feynman","estimatedXP":number}]}],"followUp":"string"}.',
+    'JSON 结构必须为：{"detectedDirection":"string","inferredLevel":"Beginner|Intermediate|Advanced","headline":"string","steps":[{"title":"string","summary":"string","type":"concept|project|leetcode|feynman","estimatedXP":number}],"followUpQuestion":"string","quickReplies":["string"]}.',
   ].join('\n'),
   userPrompt: [
     `用户输入：${intent}`,
     `系统推断方向：${inferredDirection}`,
     `系统推断等级：${inferredLevel}`,
-    '请生成 3 个 Tier-1 Checklist 模块，并让模块标题保持段落级聚合。',
-    '每个模块任务要偏向可直接执行的面试训练、题目练习或项目面试表达。',
+    '请按 MVC 原则生成刚好足够达成目标的步骤。',
+    '如果等级信息不明确，请默认按 Beginner 处理，并在 followUpQuestion 中简短确认。',
+    '请务必根据 followUpQuestion 提供相匹配的 quickReplies，供用户快捷点击。',
     '默认核心考纲：大厂技术面试通关。',
-    '追问文案必须明确询问用户是否要切换到独立开发者或自定义其他方向。',
   ].join('\n'),
 });
+
+export const buildOnboardingMarkdownPrompt = (
+  intent: string,
+  inferredDirection: string,
+  inferredLevel: OnboardingExperienceLevel = 'Beginner'
+) => ({
+  systemPrompt: [
+    '你是一个意图驱动的学习大盘生成器。',
+    '你的任务必须严格遵守 Minimum Viable Completeness 原则：只输出达成目标所需的最少步骤，不多不少。',
+    '请严格使用 Markdown 格式输出。',
+    '格式要求：',
+    '1. 必须以 "**你的目标拆解如下：**" 开头。',
+    '2. 任务清单必须使用 "- [ ]" 的 Checkbox 格式。',
+    '3. 如果用户没有明确说明难度或经验等级，默认把上下文视为 Beginner。',
+    '4. 在 Checklist 之后，使用 "---" 分隔线，并在下方以 "**💡 追问确认：**" 开头提供一个简短 followUpQuestion，用于确认当前等级判断是否合适。',
+    '示例格式：',
+    '**你的目标拆解如下：**',
+    '- [ ] 了解 React 生命周期',
+    '- [ ] 完成一个简单的 Counter 项目',
+    '',
+    '---',
+    '**💡 追问确认：**',
+    '我目前是以“初级”为您制定的，这个方向合适吗？',
+  ].join('\n'),
+  userPrompt: [
+    `用户输入：${intent}`,
+    `系统推断方向：${inferredDirection}`,
+    `系统推断等级：${inferredLevel}`,
+    '请按要求生成 Markdown 格式的错落显现清单与追问。',
+  ].join('\n'),
+});
+
+// 新增：专门用于支持 Markdown 和 Streaming 的请求方法
+export async function* requestAIMarkdownStream(systemPrompt: string, userPrompt: string): AsyncGenerator<string, void, unknown> {
+  const isGroq = Boolean(GROQ_API_KEY);
+  const isOpenAI = Boolean(OPENAI_API_KEY);
+  
+  // 优先使用支持标准 SSE 的 OpenAI/Groq
+  if (isGroq || isOpenAI) {
+    const apiKey = isGroq ? GROQ_API_KEY : OPENAI_API_KEY;
+    const model = isGroq ? GROQ_MODEL : OPENAI_MODEL;
+    const endpoint = isGroq ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.2,
+        stream: true,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Stream request failed: ${response.statusText}`);
+    }
+
+    if (!response.body) throw new Error('No response body for streaming');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      const lines = chunk.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+          try {
+            const data = JSON.parse(line.slice(6));
+            const content = data.choices?.[0]?.delta?.content;
+            if (content) yield content;
+          } catch (e) {
+            // ignore partial JSON parse errors
+          }
+        }
+      }
+    }
+  } else if (GEMINI_API_KEY) {
+    // 降级：如果只有 Gemini，使用非流式的备用方案（或实现 Gemini 的 SSE）
+    // 这里为了简化演示直接使用普通请求模拟流
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: { text: systemPrompt } },
+          contents: [{ parts: [{ text: userPrompt }] }],
+          generationConfig: { temperature: 0.2 }, // 不限定 JSON
+        }),
+      }
+    );
+    
+    if (!response.ok) throw new Error(`Gemini request failed: ${response.statusText}`);
+    const payload = await response.json();
+    const content = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (content) {
+      // 模拟流式输出
+      const chunkSize = 5;
+      for (let i = 0; i < content.length; i += chunkSize) {
+        yield content.slice(i, i + chunkSize);
+        await new Promise(r => setTimeout(r, 20));
+      }
+    }
+  } else {
+    throw new Error('No API key configured for streaming.');
+  }
+}
 
 interface AIJsonResponse {
   subTasks?: unknown;
   tasks?: unknown;
+  steps?: unknown;
+  inferredLevel?: unknown;
+  followUpQuestion?: unknown;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -407,7 +529,7 @@ const requestViaGroq = async (systemPrompt: string, userPrompt: string): Promise
       temperature: 0.2,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: systemPrompt + '\nIMPORTANT: You must return the output in JSON format.' },
         { role: 'user', content: userPrompt },
       ],
     }),
