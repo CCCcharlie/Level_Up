@@ -42,18 +42,39 @@ type TargetLevel = 'Junior' | 'Mid' | 'Senior';
 export type OnboardingExperienceLevel = 'Beginner' | 'Intermediate' | 'Advanced';
 
 export interface OnboardingChecklistStep {
+  id?: string;
   title: string;
   summary: string;
+  description?: string;
   type: 'concept' | 'project' | 'leetcode' | 'feynman';
   estimatedXP?: number;
 }
 
+export interface OnboardingChecklistQuickReply {
+  id?: string;
+  label: string;
+  value?: string;
+  intent?: string;
+}
+
+export interface OnboardingChecklistModule {
+  title: string;
+  focus: string;
+  summary: string;
+  tasks: OnboardingChecklistStep[];
+}
+
 export interface OnboardingChecklistResponse {
   detectedDirection?: string;
+  detectedLevel?: TargetLevel;
   inferredLevel: OnboardingExperienceLevel;
   headline?: string;
-  steps: OnboardingChecklistStep[];
+  steps?: OnboardingChecklistStep[];
+  tasks?: OnboardingChecklistStep[];
+  checklist?: OnboardingChecklistModule[];
   followUpQuestion: string;
+  followUp?: string;
+  quickReplies?: Array<string | OnboardingChecklistQuickReply>;
 }
 
 export interface OnboardingChecklistDraft extends OnboardingChecklistResponse {}
@@ -136,6 +157,11 @@ export const buildOnboardingPrompt = (
   inferredLevel: OnboardingExperienceLevel = 'Beginner'
 ) => ({
   systemPrompt: [
+    'Return strict JSON only. For the staggered reveal UI, include a top-level tasks array.',
+    'Each task must include id, title, description, summary, type, and estimatedXP.',
+    'After tasks, include followUpQuestion and quickReplies.',
+    'quickReplies must be decided by the AI from the generated tasks and the followUpQuestion; never use fixed generic choices.',
+    'quickReplies must contain 2-4 items. Prefer objects shaped as {"label":"string","value":"string","intent":"confirm|adjust_level|add_context|regenerate"}.',
     '你是一个意图驱动的学习大盘生成器。',
     '你的任务必须严格遵守 Minimum Viable Completeness 原则：只输出达成目标所需的最少步骤，不多不少。',
     '如果用户没有明确说明难度或经验等级，默认把上下文视为 Beginner。',
@@ -153,6 +179,8 @@ export const buildOnboardingPrompt = (
     '请按 MVC 原则生成刚好足够达成目标的步骤。',
     '如果等级信息不明确，请默认按 Beginner 处理，并在 followUpQuestion 中简短确认。',
     '请务必根据 followUpQuestion 提供相匹配的 quickReplies，供用户快捷点击。',
+    'For this UI, output tasks as the canonical checklist field. You may also include steps for backward compatibility.',
+    'Do not hard-code quickReplies. Choose the labels and values according to the user goal, generated tasks, and follow-up question.',
     '默认核心考纲：大厂技术面试通关。',
   ].join('\n'),
 });
