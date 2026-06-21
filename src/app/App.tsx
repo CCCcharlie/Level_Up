@@ -4,11 +4,8 @@ import useGameStore from '../store/useGameStore';
 import { CareerOnboarding } from './components/CareerOnboarding';
 import  LearningPathFlow  from './components/LearningPathFlow';
 import { StarConstellationSkillTree } from './components/StarConstellationSkillTree';
-import  EnhancedTaskCenter  from './components/EnhancedTaskCenter';
-import  CustomProjectSystem  from './components/CustomProjectSystem';
-import EquipmentSystem from './components/EquipmentSystem';
+import { NodeSidebar } from './components/NodeSidebar';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
-import { ScrollArea } from './components/ui/scroll-area';
 
 
 // UI Components
@@ -241,24 +238,7 @@ export default function App() {
           </SidebarHeader>
 
           <SidebarContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <ScrollArea className="h-full flex-1 px-2 py-4 [&>[data-slot=scroll-area-viewport]>div]:!block">
-              <div className="flex flex-col gap-4 pb-24">
-                {/* 模块间增加间距与阴影区分 */}
-                {/*
-                  Root cause: ScrollArea sits inside a flex column; without shrink-0, nested sections can be compressed
-                  when viewport height changes, causing internal panels to look truncated.
-                */}
-                <section className="shrink-0 bg-slate-900/30 rounded-xl p-1 border border-transparent hover:border-slate-800 transition-colors shadow-2xl shadow-black/20">
-                  <EnhancedTaskCenter />
-                </section>
-                <section className="shrink-0 bg-slate-900/30 rounded-xl p-1 shadow-2xl shadow-black/20">
-                  <CustomProjectSystem />
-                </section>
-                <section className="shrink-0 bg-slate-900/30 rounded-xl p-1 shadow-2xl shadow-black/20">
-                  <EquipmentSystem />
-                </section>
-              </div>
-            </ScrollArea>
+            <NodeSidebar className="min-h-0 flex-1" />
           </SidebarContent>
         </Sidebar>
 
