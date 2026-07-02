@@ -6,6 +6,9 @@ import  LearningPathFlow  from './components/LearningPathFlow';
 import { StarConstellationSkillTree } from './components/StarConstellationSkillTree';
 import { NodeSidebar } from './components/NodeSidebar';
 import { LanguageSwitcher } from './components/LanguageSwitcher';
+import { SourceDetailView } from './components/source/SourceDetailView';
+import { SourceList } from './components/source/SourceList';
+import useSourceStore from '../store/useSourceStore';
 
 
 // UI Components
@@ -36,6 +39,9 @@ export default function App() {
     userTargetLevel,
     currentUser,
   } = useGameStore();
+  const selectedSource = useSourceStore((state) =>
+    state.sources.find((source) => source.id === state.selectedSourceId) ?? null
+  );
 ;
   useEffect(() => {
     void fetchUserData();
@@ -238,7 +244,10 @@ export default function App() {
           </SidebarHeader>
 
           <SidebarContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <NodeSidebar className="min-h-0 flex-1" />
+            <NodeSidebar className="min-h-0 flex-[1.35]" />
+            <div className="min-h-0 flex-[0.85] bg-slate-950 px-4 pb-4">
+              <SourceList />
+            </div>
           </SidebarContent>
         </Sidebar>
 
@@ -258,6 +267,7 @@ export default function App() {
               <TabsList className="bg-slate-900/50 border border-slate-800 w-fit mb-6">
                 <TabsTrigger value="roadmap" className="data-[state=active]:bg-purple-600 px-8">{t('app.roadmapTab')}</TabsTrigger>
                 <TabsTrigger value="star-chart" className="data-[state=active]:bg-blue-600 px-8">{t('app.starChartTab')}</TabsTrigger>
+                <TabsTrigger value="sources" className="data-[state=active]:bg-cyan-600 px-8">Sources</TabsTrigger>
               </TabsList>
 
               <Card className="flex-1 bg-slate-900/20 border-slate-800 backdrop-blur-sm relative overflow-hidden">
@@ -266,6 +276,14 @@ export default function App() {
                 </TabsContent>
                 <TabsContent value="star-chart" className="m-0 h-full">
                   <StarConstellationSkillTree />
+                </TabsContent>
+                <TabsContent value="sources" className="m-0 h-full">
+                  <SourceDetailView
+                    source={selectedSource}
+                    onReExtract={(source) => {
+                      toast.info(`Re-extract queued for "${source.title}".`);
+                    }}
+                  />
                 </TabsContent>
               </Card>
             </Tabs>
