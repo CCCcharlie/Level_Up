@@ -1,34 +1,86 @@
-import type { Source } from '../../../types/source';
-import { Badge } from '../ui/badge';
-import { Card } from '../ui/card';
-import { cn } from '../ui/utils';
-import { formatSourceDate, getSourceStatusClassName } from './sourceUtils';
+import * as React from "react";
+import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { cn } from "@/lib/utils";  // 使用绝对路径别名
+import { MoreVertical, Edit3, Trash2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
+import useSourceStore from "@/store/useSourceStore"; // 使用绝对路径别名
+import { formatSourceDate, getSourceStatusClassName } from "./sourceUtils";
 
 interface SourceCardProps {
-  source: Source;
+  source: {
+    id: string;
+    title: string;
+    status: 'pending' | 'processing' | 'completed' | 'error';
+    createdAt: number;
+    updatedAt: number;
+  };
   active: boolean;
-  onSelect: (sourceId: string) => void;
+  onSelect: (id: string) => void;
 }
 
 export function SourceCard({ source, active, onSelect }: SourceCardProps) {
+  const deleteSource = useSourceStore((state) => state.deleteSource);
+  const updateSource = useSourceStore((state) => state.updateSource);
+  
+  const handleRename = () => {
+    const newTitle = prompt("请输入新的标题:", source.title);
+    if (newTitle && newTitle.trim() !== source.title) {
+      updateSource(source.id, { title: newTitle.trim() });
+    }
+  };
+
+  const handleDelete = () => {
+    if (window.confirm(`确定要删除 "${source.title}" 吗？`)) {
+      deleteSource(source.id);
+    }
+  };
+
   return (
-    <button type="button" className="w-full text-left" onClick={() => onSelect(source.id)}>
-      <Card
-        className={cn(
-          'border-slate-800 bg-slate-900/55 p-3 transition-colors hover:border-cyan-400/35 hover:bg-slate-900',
-          active && 'border-cyan-400/40 bg-cyan-400/10'
-        )}
-      >
-        <div className="flex items-start justify-between gap-3">
+    <Card
+      className={cn(
+        'border-slate-800 bg-slate-900/55 p-3 transition-colors hover:border-cyan-400/35 hover:bg-slate-900',
+        active && 'border-cyan-400/40 bg-cyan-400/10'
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <button 
+          type="button" 
+          className="flex-1 text-left"
+          onClick={() => onSelect(source.id)}
+        >
           <div className="min-w-0">
             <h3 className="truncate text-sm font-medium text-slate-100">{source.title}</h3>
             <p className="mt-1 text-xs text-slate-500">{formatSourceDate(source.createdAt)}</p>
           </div>
-          <Badge className={cn('shrink-0 border text-[10px] capitalize', getSourceStatusClassName(source.status))}>
-            {source.status}
-          </Badge>
-        </div>
-      </Card>
-    </button>
+        </button>
+        <Badge className={cn('shrink-0 border text-[10px] capitalize', getSourceStatusClassName(source.status))}>
+          {source.status}
+        </Badge>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-1 rounded-md hover:bg-slate-800">
+              <MoreVertical className="size-4 text-slate-400" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40 bg-slate-800 border-slate-700">
+            <DropdownMenuItem 
+              className="cursor-pointer text-amber-200 hover:bg-amber-900/30 focus:bg-amber-900/30"
+              onClick={handleRename}
+            >
+              <Edit3 className="mr-2 size-4" />
+              重命名
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              className="cursor-pointer text-red-300 hover:bg-red-900/30 focus:bg-red-900/30"
+              onClick={handleDelete}
+            >
+              <Trash2 className="mr-2 size-4" />
+              删除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </Card>
   );
 }

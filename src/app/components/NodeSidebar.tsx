@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";  // 使用绝对路径别名
 import { ExternalLink, X, ChevronRight, FileText } from "lucide-react";
 import useGameStore from "@/store/useGameStore";  // 使用绝对路径别名
 import { makeMockData, MOCK_LOGS } from "@/lib/mock-data";  // 使用绝对路径别名
-import { CategoryChecklist } from "../types/database";
+import { CategoryChecklist } from "@/types/database";  // 使用绝对路径别名
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { NodeEditorTab } from "./NodeEditorTab";
 import { SourceManagerTab } from "./SourceManagerTab";

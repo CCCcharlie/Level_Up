@@ -1,10 +1,12 @@
-import * as React from 'react';
-import { FileText } from 'lucide-react';
-
-import useSourceStore from '../../../store/useSourceStore';
-import { ScrollArea } from '../ui/scroll-area';
-import { SourceCard } from './SourceCard';
-import { SourceCreateModal } from './SourceCreateModal';
+import * as React from "react";
+import { ScrollArea } from "../ui/scroll-area";
+import { Card } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { cn } from "@/lib/utils";  // 使用绝对路径别名
+import { MoreVertical, FileText } from "lucide-react";
+import { SourceCard } from "./SourceCard";
+import useSourceStore from "@/store/useSourceStore"; // 使用绝对路径别名
+import { formatSourceDate, getSourceStatusClassName } from "./sourceUtils";
 
 export function SourceList() {
   const sources = useSourceStore((state) => state.sources);
@@ -26,7 +28,7 @@ export function SourceList() {
         <FileText className="size-4 shrink-0 text-cyan-200/70" />
       </div>
 
-      <SourceCreateModal />
+      {/* Removed SourceCreateModal from here as requested */}
 
       <ScrollArea className="min-h-0 flex-1 pr-3">
         <div className="space-y-2">

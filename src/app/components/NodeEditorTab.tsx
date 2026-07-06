@@ -9,8 +9,8 @@ import { AILogTicker } from "./AITicker";
 import { cn } from "@/lib/utils"; // 使用绝对路径别名
 import { ExternalLink, X, ChevronRight, FileText } from "lucide-react";
 import useGameStore from "@/store/useGameStore"; // 使用绝对路径别名
-import { makeMockData, MOCK_LOGS } from "@/lib/mock-data"; // 使用绝对路径别name
-import { CategoryChecklist } from "../types/database";
+import { makeMockData, MOCK_LOGS } from "@/lib/mock-data"; // 使用绝对路径别名
+import { CategoryChecklist } from "@/types/database"; // 使用绝对路径别名
 
 type SidebarStatus = "idle" | "scraping" | "active";
 
