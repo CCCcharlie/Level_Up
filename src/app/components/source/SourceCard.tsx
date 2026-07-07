@@ -6,6 +6,7 @@ import { MoreVertical, Edit3, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import useSourceStore from "@/store/useSourceStore"; // 使用绝对路径别名
 import { formatSourceDate, getSourceStatusClassName } from "./sourceUtils";
+import { Checkbox } from "../ui/checkbox";
 
 interface SourceCardProps {
   source: {
@@ -17,9 +18,11 @@ interface SourceCardProps {
   };
   active: boolean;
   onSelect: (id: string) => void;
+  isSelected?: boolean;  // 是否被选中
+  onToggleSelect?: () => void;  // 切换选择状态的回调
 }
 
-export function SourceCard({ source, active, onSelect }: SourceCardProps) {
+export function SourceCard({ source, active, onSelect, isSelected, onToggleSelect }: SourceCardProps) {
   const deleteSource = useSourceStore((state) => state.deleteSource);
   const updateSource = useSourceStore((state) => state.updateSource);
   
@@ -40,20 +43,43 @@ export function SourceCard({ source, active, onSelect }: SourceCardProps) {
     <Card
       className={cn(
         'border-slate-800 bg-slate-900/55 p-3 transition-colors hover:border-cyan-400/35 hover:bg-slate-900',
-        active && 'border-cyan-400/40 bg-cyan-400/10'
+        active && 'border-cyan-400/40 bg-cyan-400/10',
+        isSelected && 'ring-2 ring-cyan-500/50 border-cyan-500/50'
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <button 
-          type="button" 
-          className="flex-1 text-left"
-          onClick={() => onSelect(source.id)}
-        >
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-medium text-slate-100">{source.title}</h3>
-            <p className="mt-1 text-xs text-slate-500">{formatSourceDate(source.createdAt)}</p>
+        {onToggleSelect ? (
+          <div className="flex items-start gap-3 flex-1">
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={onToggleSelect}
+              className="mt-1 border-slate-700 data-[state=checked]:border-cyan-400 data-[state=checked]:bg-cyan-400"
+            />
+            <div className="flex-1">
+              <button 
+                type="button" 
+                className="flex-1 text-left"
+                onClick={() => onSelect(source.id)}
+              >
+                <div className="min-w-0">
+                  <h3 className="truncate text-sm font-medium text-slate-100">{source.title}</h3>
+                  <p className="mt-1 text-xs text-slate-500">{formatSourceDate(source.createdAt)}</p>
+                </div>
+              </button>
+            </div>
           </div>
-        </button>
+        ) : (
+          <button 
+            type="button" 
+            className="flex-1 text-left"
+            onClick={() => onSelect(source.id)}
+          >
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-medium text-slate-100">{source.title}</h3>
+              <p className="mt-1 text-xs text-slate-500">{formatSourceDate(source.createdAt)}</p>
+            </div>
+          </button>
+        )}
         <Badge className={cn('shrink-0 border text-[10px] capitalize', getSourceStatusClassName(source.status))}>
           {source.status}
         </Badge>

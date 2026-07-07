@@ -11,6 +11,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { AILogTicker } from "./AITicker";
 import useSourceStore from "@/store/useSourceStore"; // 使用绝对路径别名
 import { cn } from "@/lib/utils";
+import { extractSourceContent } from "@/lib/aiExtractionService";
 
 interface SourceManagerTabProps {
   className?: string;
@@ -36,6 +37,14 @@ interface ExtractedContent {
   content: string;
 }
 
+// 添加一个新的接口来管理完整的AI处理结果
+interface AIProcessingResult {
+  sourceId: string;
+  checklists: ChecklistCategory[];
+  extractedContents: ExtractedContent[];
+  timestamp: number;
+}
+
 export function SourceManagerTab({ className }: SourceManagerTabProps) {
   const sources = useSourceStore((state) => state.sources);
   const [selectedSourceIds, setSelectedSourceIds] = React.useState<string[]>([]);
@@ -43,6 +52,24 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
   const [checklists, setChecklists] = React.useState<ChecklistCategory[]>([]);
   const [extractedContents, setExtractedContents] = React.useState<ExtractedContent[]>([]);
   const [showOriginalContent, setShowOriginalContent] = React.useState(true);
+  
+  // 从localStorage加载持久化数据
+  React.useEffect(() => {
+    const savedResults = localStorage.getItem('aiProcessingResults');
+    if (savedResults) {
+      try {
+        const results: AIProcessingResult[] = JSON.parse(savedResults);
+        // 加载最新的结果
+        if (results.length > 0) {
+          const latestResult = results[results.length - 1]; // 取最新一次处理的结果
+          setChecklists(latestResult.checklists);
+          setExtractedContents(latestResult.extractedContents);
+        }
+      } catch (error) {
+        console.error('Failed to parse saved AI processing results:', error);
+      }
+    }
+  }, []);
   
   const toggleSelectAll = () => {
     if (selectedSourceIds.length === sources.length) {
@@ -60,14 +87,50 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
     );
   };
 
-  const handleAIProcess = () => {
+  const handleAIProcess = async () => {
     if (selectedSourceIds.length === 0) return;
     
     setProcessing(true);
     
-    // Simulate AI processing
-    setTimeout(() => {
-      // Generate sample checklists
+    try {
+      // 获取选中源的原始内容
+      const selectedSources = sources.filter(source => selectedSourceIds.includes(source.id));
+      const combinedContent = selectedSources.map(source => source.rawContent).join('\n\n');
+      
+      // 调用AI提炼服务
+      const extractionResult = await extractSourceContent(combinedContent);
+      
+      // 设置提炼结果
+      setChecklists(extractionResult.categories);
+      setExtractedContents(extractionResult.extractedContent);
+      
+      // 保存到localStorage以实现持久化
+      const processingResult: AIProcessingResult = {
+        sourceId: selectedSourceIds[0], // 使用第一个选中的源ID
+        checklists: extractionResult.categories,
+        extractedContents: extractionResult.extractedContent,
+        timestamp: Date.now()
+      };
+      
+      // 从localStorage获取现有结果并添加新结果
+      let existingResults: AIProcessingResult[] = [];
+      const savedResults = localStorage.getItem('aiProcessingResults');
+      if (savedResults) {
+        try {
+          existingResults = JSON.parse(savedResults);
+        } catch (error) {
+          console.error('Failed to parse existing results:', error);
+        }
+      }
+      
+      // 限制保存最近的几个结果
+      existingResults = [...existingResults, processingResult].slice(-10);
+      localStorage.setItem('aiProcessingResults', JSON.stringify(existingResults));
+      
+    } catch (error) {
+      console.error('AI processing failed:', error);
+      
+      // 在错误情况下，仍显示一些示例数据
       const newChecklists: ChecklistCategory[] = [
         {
           id: 'category-1',
@@ -87,7 +150,6 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
         }
       ];
       
-      // Generate sample extracted content
       const newExtractedContents: ExtractedContent[] = [
         { id: 'extract-1', title: '核心概念解释', type: 'concept', content: '这是从来源中提取的核心概念...' },
         { id: 'extract-2', title: '实践案例', type: 'practice', content: '这是从来源中提取的实践案例...' }
@@ -95,13 +157,14 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
       
       setChecklists(newChecklists);
       setExtractedContents(newExtractedContents);
+    } finally {
       setProcessing(false);
-    }, 2000);
+    }
   };
 
   const updateChecklistItem = (categoryId: string, itemId: string, completed: boolean) => {
-    setChecklists(prev => 
-      prev.map(category => 
+    setChecklists(prev => {
+      const updatedChecklists = prev.map(category => 
         category.id === categoryId 
           ? {
               ...category,
@@ -110,8 +173,26 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
               )
             }
           : category
-      )
-    );
+      );
+      
+      // 更新localStorage中的持久化数据
+      const savedResults = localStorage.getItem('aiProcessingResults');
+      if (savedResults) {
+        try {
+          const results: AIProcessingResult[] = JSON.parse(savedResults);
+          // 更新最新结果的checklists
+          if (results.length > 0) {
+            const latestResult = results[results.length - 1];
+            latestResult.checklists = updatedChecklists;
+            localStorage.setItem('aiProcessingResults', JSON.stringify(results));
+          }
+        } catch (error) {
+          console.error('Failed to update checklist in storage:', error);
+        }
+      }
+      
+      return updatedChecklists;
+    });
   };
 
   return (
@@ -255,7 +336,11 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
         {/* Original Sources List */}
         {showOriginalContent && (
           <div className="flex h-full min-h-0 flex-col">
-            <SourceList />
+            <SourceList 
+              selectedSourceIds={selectedSourceIds}
+              onSelectedSourceIdsChange={setSelectedSourceIds}
+              onAIExtract={handleAIProcess}
+            />
           </div>
         )}
       </div>
