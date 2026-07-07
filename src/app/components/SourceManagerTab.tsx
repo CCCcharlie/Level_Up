@@ -210,139 +210,141 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
-        <div className="mb-4 flex items-center justify-between shrink-0">
-          <SourceCreateModal />
-          
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="select-all"
-                checked={selectedSourceIds.length > 0 && selectedSourceIds.length === sources.length}
-                onCheckedChange={toggleSelectAll}
-                className="border-slate-700 data-[state=checked]:border-cyan-400 data-[state=checked]:bg-cyan-400"
-              />
-              <label htmlFor="select-all" className="text-xs text-slate-400">
-                全选
-              </label>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="flex flex-col gap-4 pb-4">
+            <div className="mb-4 flex items-center justify-between shrink-0">
+              <SourceCreateModal />
+              
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={selectedSourceIds.length > 0 && selectedSourceIds.length === sources.length}
+                    onCheckedChange={toggleSelectAll}
+                    className="border-slate-700 data-[state=checked]:border-cyan-400 data-[state=checked]:bg-cyan-400"
+                  />
+                  <label htmlFor="select-all" className="text-xs text-slate-400">
+                    全选
+                  </label>
+                </div>
+                
+                <Button
+                  onClick={handleAIProcess}
+                  disabled={selectedSourceIds.length === 0 || processing}
+                  className="h-9 bg-indigo-500/15 text-indigo-100 hover:bg-indigo-500/25 disabled:opacity-50"
+                >
+                  <Sparkles className="size-4 mr-2" />
+                  AI 提炼
+                </Button>
+              </div>
             </div>
             
-            <Button
-              onClick={handleAIProcess}
-              disabled={selectedSourceIds.length === 0 || processing}
-              className="h-9 bg-indigo-500/15 text-indigo-100 hover:bg-indigo-500/25 disabled:opacity-50"
-            >
-              <Sparkles className="size-4 mr-2" />
-              AI 提炼
-            </Button>
-          </div>
-        </div>
-        
-        {processing && (
-          <div className="mb-4 rounded-2xl border border-cyan-500/15 bg-slate-950/90 p-4 shrink-0">
-            <AILogTicker active entries={[
-              "正在分析选中的来源...",
-              "提取关键概念...",
-              "生成学习要点...",
-              "整理内容结构..."
-            ]} />
-          </div>
-        )}
+            {processing && (
+              <div className="mb-4 rounded-2xl border border-cyan-500/15 bg-slate-950/90 p-4 shrink-0">
+                <AILogTicker active entries={[
+                  "正在分析选中的来源...",
+                  "提取关键概念...",
+                  "生成学习要点...",
+                  "整理内容结构..."
+                ]} />
+              </div>
+            )}
 
-        {/* Checklist Section - Appears after AI processing */}
-        {checklists.length > 0 && (
-          <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4 shrink-0">
-            <div className="flex items-center gap-2 mb-3">
-              <CheckSquare className="size-4 text-cyan-300" />
-              <h3 className="font-semibold text-slate-100">学习 Checklist</h3>
-            </div>
-            
-            <Accordion type="multiple" className="space-y-2">
-              {checklists.map((category) => (
-                <AccordionItem key={category.id} value={category.id} className="border border-slate-800/70 rounded-xl">
-                  <AccordionTrigger className="px-3 py-2 hover:no-underline">
-                    <div className="flex items-center gap-2">
-                      <Tags className="size-4 text-amber-300" />
-                      <span className="text-slate-100">{category.title}</span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-3 pb-3">
-                    <div className="space-y-2">
-                      {category.items.map((item) => (
-                        <div key={item.id} className="flex items-start gap-3 pl-1">
-                          <Checkbox
-                            checked={item.completed}
-                            onCheckedChange={(checked) => updateChecklistItem(category.id, item.id, Boolean(checked))}
-                            className="mt-1 border-slate-700 data-[state=checked]:border-cyan-400 data-[state=checked]:bg-cyan-400"
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm text-slate-100">{item.title}</p>
-                            <Badge variant="secondary" className="text-[10px] capitalize mt-1">
-                              {item.type}
-                            </Badge>
-                          </div>
+            {/* Checklist Section - Appears after AI processing */}
+            {checklists.length > 0 && (
+              <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4 shrink-0">
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckSquare className="size-4 text-cyan-300" />
+                  <h3 className="font-semibold text-slate-100">学习 Checklist</h3>
+                </div>
+                
+                <Accordion type="multiple" className="space-y-2">
+                  {checklists.map((category) => (
+                    <AccordionItem key={category.id} value={category.id} className="border border-slate-800/70 rounded-xl">
+                      <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                        <div className="flex items-center gap-2">
+                          <Tags className="size-4 text-amber-300" />
+                          <span className="text-slate-100">{category.title}</span>
                         </div>
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          </div>
-        )}
-
-        {/* Extracted Content Section - Appears after AI processing */}
-        {extractedContents.length > 0 && (
-          <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4 shrink-0">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="size-4 text-green-300" />
-                <h3 className="font-semibold text-slate-100">提炼内容</h3>
+                      </AccordionTrigger>
+                      <AccordionContent className="px-3 pb-3">
+                        <div className="space-y-2">
+                          {category.items.map((item) => (
+                            <div key={item.id} className="flex items-start gap-3 pl-1">
+                              <Checkbox
+                                checked={item.completed}
+                                onCheckedChange={(checked) => updateChecklistItem(category.id, item.id, Boolean(checked))}
+                                className="mt-1 border-slate-700 data-[state=checked]:border-cyan-400 data-[state=checked]:bg-cyan-400"
+                              />
+                              <div className="flex-1">
+                                <p className="text-sm text-slate-100">{item.title}</p>
+                                <Badge variant="secondary" className="text-[10px] capitalize mt-1">
+                                  {item.type}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
               </div>
-            </div>
-            
-            <ScrollArea className="h-40">
-              <div className="space-y-3">
-                {extractedContents.map((content) => (
-                  <Card key={content.id} className="border-slate-800 bg-slate-900/60 p-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-slate-100">{content.title}</h4>
-                      <Badge variant="secondary" className="text-[10px] capitalize">
-                        {content.type}
-                      </Badge>
-                    </div>
-                    <p className="mt-2 text-sm text-slate-300">{content.content}</p>
-                  </Card>
-                ))}
+            )}
+
+            {/* Extracted Content Section - Appears after AI processing */}
+            {extractedContents.length > 0 && (
+              <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4 shrink-0">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <FileText className="size-4 text-green-300" />
+                    <h3 className="font-semibold text-slate-100">提炼内容</h3>
+                  </div>
+                </div>
+                
+                <div className="space-y-3">
+                  {extractedContents.map((content) => (
+                    <Card key={content.id} className="border-slate-800 bg-slate-900/60 p-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-slate-100">{content.title}</h4>
+                        <Badge variant="secondary" className="text-[10px] capitalize">
+                          {content.type}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-300">{content.content}</p>
+                    </Card>
+                  ))}
+                </div>
               </div>
-            </ScrollArea>
-          </div>
-        )}
+            )}
 
-        {/* Original Content Toggle */}
-        {sources.length > 0 && (
-          <div className="mb-4 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowOriginalContent(!showOriginalContent)}
-              className="text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-            >
-              {showOriginalContent ? '隐藏' : '显示'} 原始内容
-            </Button>
-          </div>
-        )}
+            {/* Original Content Toggle */}
+            {sources.length > 0 && (
+              <div className="mb-4 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowOriginalContent(!showOriginalContent)}
+                  className="text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+                >
+                  {showOriginalContent ? '隐藏' : '显示'} 原始内容
+                </Button>
+              </div>
+            )}
 
-        {/* Original sources area - SourceList has its own ScrollArea */}
-        {showOriginalContent && (
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <SourceList 
-              selectedSourceIds={selectedSourceIds}
-              onSelectedSourceIdsChange={setSelectedSourceIds}
-              onAIExtract={handleAIProcess}
-            />
+            {/* Original sources area - SourceList has its own ScrollArea */}
+            {showOriginalContent && (
+              <div className="flex-1 min-h-0">
+                <SourceList 
+                  selectedSourceIds={selectedSourceIds}
+                  onSelectedSourceIdsChange={setSelectedSourceIds}
+                  onAIExtract={handleAIProcess}
+                />
+              </div>
+            )}
           </div>
-        )}
+        </ScrollArea>
       </div>
     </section>
   );

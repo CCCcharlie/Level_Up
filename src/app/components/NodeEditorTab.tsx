@@ -131,7 +131,7 @@ export function NodeEditorTab({
         <h2 className="mt-2 truncate text-lg font-semibold text-slate-50">{nodeTitle}</h2>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="h-full">
         <div className="flex flex-col justify-center gap-5 p-5">
           <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
             <label className="mb-2 block text-[11px] uppercase tracking-[0.28em] text-slate-400">检索目标</label>
@@ -198,7 +198,7 @@ export function NodeEditorTab({
         <h2 className="mt-2 truncate text-lg font-semibold text-slate-50">{nodeTitle}</h2>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="h-full">
         <div className="p-4">
           <AILogTicker active entries={MOCK_LOGS} onComplete={handleTickerComplete} />
         </div>
@@ -334,7 +334,7 @@ export function NodeEditorTab({
                 </Button>
               </div>
 
-              <ScrollArea className="min-h-0 flex-1 px-5 py-4">
+              <ScrollArea className="h-full px-5 py-4">
                 <div className="space-y-4">
                   <div className="rounded-2xl border border-slate-800/70 bg-white/5 p-4 backdrop-blur-xl">
                     <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Source Citation</p>
