@@ -61,18 +61,28 @@ export function NodeEditorTab({
   const [openCategoryIds, setOpenCategoryIds] = React.useState<string[]>([]);
   const [inlineEditId, setInlineEditId] = React.useState<string | null>(null);
   const [inlineEditValue, setInlineEditValue] = React.useState("了解基础概念");
-  const [checklists, setChecklists] = React.useState<CategoryChecklist[]>(() => makeMockData(nodeTitle).categories);
+  
+  // 使用React.useRef来保存checklists状态，避免切换时丢失
+  const checklistsRef = React.useRef<CategoryChecklist[]>(makeMockData(nodeTitle).categories);
+  const [checklists, setChecklists] = React.useState<CategoryChecklist[]>(checklistsRef.current);
 
   const mockData = React.useMemo(() => makeMockData(nodeTitle) as MockDataResult, [nodeTitle]);
   const activeSource = mockData.sources.find((source: any) => source.id === activeSourceId) ?? null;
 
+  // 只在nodeTitle真正改变时才重置状态
+  const prevNodeTitleRef = React.useRef(nodeTitle);
   React.useEffect(() => {
-    setSearchQuery(nodeTitle);
-    setChecklists(makeMockData(nodeTitle).categories);
-    setInlineEditValue("了解基础概念");
-    setInlineEditId(null);
-    setActiveSourceId(null);
-    setSidebarStatus("idle");
+    if (prevNodeTitleRef.current !== nodeTitle) {
+      setSearchQuery(nodeTitle);
+      const newChecklists = makeMockData(nodeTitle).categories;
+      checklistsRef.current = newChecklists;
+      setChecklists(newChecklists);
+      setInlineEditValue("了解基础概念");
+      setInlineEditId(null);
+      setActiveSourceId(null);
+      setSidebarStatus("idle");
+      prevNodeTitleRef.current = nodeTitle;
+    }
   }, [nodeTitle]);
 
   React.useEffect(() => {
@@ -105,16 +115,16 @@ export function NodeEditorTab({
   };
 
   const updateChecklist = (categoryId: string, itemId: string, completed: boolean) => {
-    setChecklists((current) =>
-      current.map((category: any) =>
-        category.id !== categoryId
-          ? category
-          : {
-              ...category,
-              items: category.items.map((item: any) => (item.id === itemId ? { ...item, completed } : item)),
-            }
-      )
+    const updatedChecklists = checklists.map((category: any) =>
+      category.id !== categoryId
+        ? category
+        : {
+            ...category,
+            items: category.items.map((item: any) => (item.id === itemId ? { ...item, completed } : item)),
+          }
     );
+    checklistsRef.current = updatedChecklists;
+    setChecklists(updatedChecklists);
     onChecklistChange?.({ categoryId, itemId, completed });
   };
 

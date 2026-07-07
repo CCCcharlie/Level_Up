@@ -250,8 +250,10 @@ export default function App() {
           </SidebarHeader>
 
           <SidebarContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <NodeSidebar className="min-h-0 flex-[1.35]" />
-            <div className="min-h-0 flex-[0.85] bg-slate-950 px-4 pb-4">
+            <div className="min-h-0 flex-[1.35] overflow-hidden">
+              <NodeSidebar className="h-full" />
+            </div>
+            <div className="min-h-0 flex-[0.85] overflow-hidden bg-slate-950 px-4 pb-4">
               <SourceList />
             </div>
           </SidebarContent>

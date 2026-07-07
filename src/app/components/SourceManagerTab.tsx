@@ -197,7 +197,7 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
 
   return (
     <section className={`flex h-full min-h-0 flex-col gap-4 bg-slate-950 px-4 py-4 text-slate-200 ${className}`}>
-      <div className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-4 py-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <div className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-4 py-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] shrink-0">
         <p className="text-[11px] uppercase tracking-[0.32em] text-slate-500">Knowledge Sources</p>
         <div className="mt-2 flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-100">
@@ -211,7 +211,7 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between shrink-0">
           <SourceCreateModal />
           
           <div className="flex items-center gap-3">
@@ -239,7 +239,7 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
         </div>
         
         {processing && (
-          <div className="mb-4 rounded-2xl border border-cyan-500/15 bg-slate-950/90 p-4">
+          <div className="mb-4 rounded-2xl border border-cyan-500/15 bg-slate-950/90 p-4 shrink-0">
             <AILogTicker active entries={[
               "正在分析选中的来源...",
               "提取关键概念...",
@@ -251,7 +251,7 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
 
         {/* Checklist Section - Appears after AI processing */}
         {checklists.length > 0 && (
-          <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4">
+          <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4 shrink-0">
             <div className="flex items-center gap-2 mb-3">
               <CheckSquare className="size-4 text-cyan-300" />
               <h3 className="font-semibold text-slate-100">学习 Checklist</h3>
@@ -293,7 +293,7 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
 
         {/* Extracted Content Section - Appears after AI processing */}
         {extractedContents.length > 0 && (
-          <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4">
+          <div className="mb-4 rounded-2xl border border-slate-800/70 bg-slate-900/50 p-4 shrink-0">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <FileText className="size-4 text-green-300" />
@@ -321,7 +321,7 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
 
         {/* Original Content Toggle */}
         {sources.length > 0 && (
-          <div className="mb-4">
+          <div className="mb-4 shrink-0">
             <Button
               variant="ghost"
               size="sm"
@@ -333,16 +333,18 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
           </div>
         )}
 
-        {/* Original Sources List */}
-        {showOriginalContent && (
-          <div className="flex h-full min-h-0 flex-col">
-            <SourceList 
-              selectedSourceIds={selectedSourceIds}
-              onSelectedSourceIdsChange={setSelectedSourceIds}
-              onAIExtract={handleAIProcess}
-            />
-          </div>
-        )}
+        {/* Scrollable area for original sources */}
+        <ScrollArea className="flex-1 min-h-0">
+          {showOriginalContent && (
+            <div className="pr-2">
+              <SourceList 
+                selectedSourceIds={selectedSourceIds}
+                onSelectedSourceIdsChange={setSelectedSourceIds}
+                onAIExtract={handleAIProcess}
+              />
+            </div>
+          )}
+        </ScrollArea>
       </div>
     </section>
   );

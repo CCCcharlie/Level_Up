@@ -43,8 +43,8 @@ export function NodeSidebar({
   onChecklistChange,
 }: NodeSidebarProps) {
   return (
-    <Tabs defaultValue="current-node" className="flex h-full w-full flex-col">
-      <TabsList className="grid w-full grid-cols-2 bg-slate-900/80">
+    <Tabs defaultValue="current-node" className="flex h-full w-full flex-col overflow-hidden">
+      <TabsList className="grid w-full grid-cols-2 bg-slate-900/80 shrink-0">
         <TabsTrigger value="current-node" className="data-[state=active]:bg-slate-800 data-[state=active]:text-cyan-100">
           Current Node
         </TabsTrigger>
@@ -53,7 +53,7 @@ export function NodeSidebar({
         </TabsTrigger>
       </TabsList>
       
-      <TabsContent value="current-node" className="flex-1 overflow-hidden p-0 mt-0">
+      <TabsContent value="current-node" className="flex-1 overflow-hidden p-0 mt-0 min-h-0">
         <NodeEditorTab
           className={className}
           node={node}
@@ -65,7 +65,7 @@ export function NodeSidebar({
         />
       </TabsContent>
       
-      <TabsContent value="sources" className="flex-1 overflow-hidden p-0 mt-0">
+      <TabsContent value="sources" className="flex-1 overflow-hidden p-0 mt-0 min-h-0">
         <SourceManagerTab className={className} />
       </TabsContent>
     </Tabs>
