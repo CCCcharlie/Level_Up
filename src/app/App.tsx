@@ -42,7 +42,56 @@ export default function App() {
   const selectedSource = useSourceStore((state) =>
     state.sources.find((source) => source.id === state.selectedSourceId) ?? null
   );
-;
+
+  // 添加加载状态，用于初始认证检查
+  const [isAuthChecking, setIsAuthChecking] = React.useState(true);
+
+  // 在组件挂载时检查本地缓存和认证状态
+  useEffect(() => {
+    const checkAuthState = async () => {
+      console.log('[App] Checking authentication status...');
+      
+      try {
+        // 1. 检查Supabase session
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          console.log('[App] Found existing session:', session.user.email);
+          
+          // 2. 检查localStorage中是否有onboarding数据
+          const storedState = localStorage.getItem('game-store');
+          if (storedState) {
+            try {
+              const parsed = JSON.parse(storedState);
+              const hasOnboardingData = parsed.state?.isOnboarded || 
+                                       parsed.state?.careerDirection ||
+                                       (parsed.state?.dynamicRoadmap && parsed.state.dynamicRoadmap.length > 0);
+              
+              if (hasOnboardingData) {
+                console.log('[App] Found persisted onboarding data in localStorage');
+              } else {
+                console.log('[App] No onboarding data found, will fetch from server');
+              }
+            } catch (error) {
+              console.error('[App] Failed to parse localStorage:', error);
+            }
+          }
+          
+          // 3. 从服务器获取最新用户数据
+          await fetchUserData();
+        } else {
+          console.log('[App] No active session found');
+        }
+      } catch (error) {
+        console.error('[App] Auth check failed:', error);
+      } finally {
+        setIsAuthChecking(false);
+      }
+    };
+
+    void checkAuthState();
+  }, []);
+
   useEffect(() => {
     void fetchUserData();
   }, [])
@@ -250,11 +299,8 @@ export default function App() {
           </SidebarHeader>
 
           <SidebarContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-[1.35] overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-hidden">
               <NodeSidebar className="h-full" />
-            </div>
-            <div className="min-h-0 flex-[0.85] overflow-hidden bg-slate-950 px-4 pb-4">
-              <SourceList />
             </div>
           </SidebarContent>
         </Sidebar>

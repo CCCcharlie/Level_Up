@@ -333,18 +333,16 @@ export function SourceManagerTab({ className }: SourceManagerTabProps) {
           </div>
         )}
 
-        {/* Scrollable area for original sources */}
-        <ScrollArea className="flex-1 min-h-0">
-          {showOriginalContent && (
-            <div className="pr-2">
-              <SourceList 
-                selectedSourceIds={selectedSourceIds}
-                onSelectedSourceIdsChange={setSelectedSourceIds}
-                onAIExtract={handleAIProcess}
-              />
-            </div>
-          )}
-        </ScrollArea>
+        {/* Original sources area - SourceList has its own ScrollArea */}
+        {showOriginalContent && (
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <SourceList 
+              selectedSourceIds={selectedSourceIds}
+              onSelectedSourceIdsChange={setSelectedSourceIds}
+              onAIExtract={handleAIProcess}
+            />
+          </div>
+        )}
       </div>
     </section>
   );

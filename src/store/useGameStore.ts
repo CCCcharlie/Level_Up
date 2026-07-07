@@ -802,6 +802,14 @@ export const useGameStore = create<GameState>()(
   },
 
   fetchUserData: async () => {
+    const currentState = get();
+    
+    // 如果已经有用户数据且已onboarded，跳过重复加载
+    if (currentState.currentUser && currentState.isOnboarded) {
+      console.log('[useGameStore:fetchUserData] User already onboarded, skipping redundant fetch');
+      return;
+    }
+
     set({ isSyncing: true });
 
     try {
@@ -815,11 +823,14 @@ export const useGameStore = create<GameState>()(
       }
 
       if (!session?.user) {
+        console.log('[useGameStore:fetchUserData] No active session');
         get().resetOnboarding();
         set({ isSyncing: false });
 
         return;
       }
+
+      console.log('[useGameStore:fetchUserData] Session found for user:', session.user.email);
 
       const userId = session.user.id;
 
@@ -836,6 +847,7 @@ export const useGameStore = create<GameState>()(
       let userRow: UserRow | null = userResult.data ?? null;
 
       if (!userRow) {
+        console.log('[useGameStore:fetchUserData] Creating user profile');
         await ensureUserProfile(session);
 
         userResult = await queryClient
@@ -886,6 +898,12 @@ export const useGameStore = create<GameState>()(
       const nextDynamicRoadmap = roadmapRow ? normalizeRoadmapNodes(roadmapRow.roadmap_data) : [];
       const hasPersistedOnboardingData = Boolean(nextCareerDirection) || nextDynamicRoadmap.length > 0;
 
+      console.log('[useGameStore:fetchUserData] Onboarding status:', {
+        hasCareerDirection: Boolean(nextCareerDirection),
+        roadmapLength: nextDynamicRoadmap.length,
+        isOnboarded: hasPersistedOnboardingData
+      });
+
       set({
         currentUser: nextCurrentUser,
         totalExp: nextTotalExp,
@@ -899,7 +917,10 @@ export const useGameStore = create<GameState>()(
       });
 
       if (hasPersistedOnboardingData) {
+        console.log('[useGameStore:fetchUserData] User is onboarded');
         set({ isOnboarded: true });
+      } else {
+        console.log('[useGameStore:fetchUserData] User needs onboarding');
       }
     } catch (error) {
       console.error('[useGameStore:fetchUserData] Failed to load user data:', error);
@@ -1378,6 +1399,15 @@ export const useGameStore = create<GameState>()(
   setLanguage: (lang: 'zh' | 'en') => {
     set({ language: lang });
     void i18n.changeLanguage(lang);
+  },
+
+  // AI交互状态管理
+  setAiInteractionState: (state: AIInteractionState) => {
+    set({ aiInteractionState: state });
+  },
+
+  setUnconfirmedChecklist: (checklist: OnboardingChecklistResponse | null) => {
+    set({ unconfirmedChecklist: checklist });
   },
 
   // 重置系统

@@ -7,6 +7,25 @@ export type Json =
   | Json[];
 
 /**
+ * CategoryChecklist 类型定义
+ */
+export interface ChecklistItem {
+  id: string;
+  title: string;
+  detail?: string;
+  completed: boolean;
+  type?: string;
+}
+
+export interface CategoryChecklist {
+  id: string;
+  title: string;
+  summary: string;
+  defaultOpen: boolean;
+  items: ChecklistItem[];
+}
+
+/**
  * Users 表
  */
 export interface UserRow {

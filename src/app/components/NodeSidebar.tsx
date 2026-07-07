@@ -1,18 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ScrollArea } from "./ui/scroll-area";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
-import { Checkbox } from "./ui/checkbox";
-import { Input } from "./ui/input";
-import { Button } from "./ui/button";
-import { AILogTicker } from "./AITicker";
-import { cn } from "@/lib/utils";  // 使用绝对路径别名
-import { ExternalLink, X, ChevronRight, FileText } from "lucide-react";
-import useGameStore from "@/store/useGameStore";  // 使用绝对路径别名
-import { makeMockData, MOCK_LOGS } from "@/lib/mock-data";  // 使用绝对路径别名
-import { CategoryChecklist } from "@/types/database";  // 使用绝对路径别名
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { NodeEditorTab } from "./NodeEditorTab";
 import { SourceManagerTab } from "./SourceManagerTab";

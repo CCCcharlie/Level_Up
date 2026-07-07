@@ -112,3 +112,54 @@ export function onAuthStateChange(callback: (session: any) => void) {
 
   return subscription;
 }
+
+// 辅助函数：检查是否有有效的认证会话
+export async function hasValidSession(): Promise<boolean> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return !!session?.user;
+  } catch (error) {
+    console.error('[hasValidSession] Error checking session:', error);
+    return false;
+  }
+}
+
+// 辅助函数：检查本地缓存中是否有onboarding数据
+export function hasOnboardingDataInCache(): boolean {
+  try {
+    const storedState = localStorage.getItem('game-store');
+    if (!storedState) {
+      return false;
+    }
+    
+    const parsed = JSON.parse(storedState);
+    const state = parsed.state;
+    
+    // 检查是否有onboarding相关的数据
+    return Boolean(
+      state?.isOnboarded || 
+      state?.careerDirection ||
+      (state?.dynamicRoadmap && Array.isArray(state.dynamicRoadmap) && state.dynamicRoadmap.length > 0)
+    );
+  } catch (error) {
+    console.error('[hasOnboardingDataInCache] Error parsing cache:', error);
+    return false;
+  }
+}
+
+// 辅助函数：获取缓存的认证状态（同步，用于快速检查）
+export function getCachedAuthStatus(): { hasSession: boolean; hasOnboarding: boolean } {
+  const hasSession = (() => {
+    try {
+      // Supabase会在localStorage中存储auth token
+      const keys = Object.keys(localStorage);
+      return keys.some(key => key.startsWith('sb-') && key.includes('auth-token'));
+    } catch {
+      return false;
+    }
+  })();
+  
+  const hasOnboarding = hasOnboardingDataInCache();
+  
+  return { hasSession, hasOnboarding };
+}

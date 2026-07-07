@@ -61,28 +61,18 @@ export function NodeEditorTab({
   const [openCategoryIds, setOpenCategoryIds] = React.useState<string[]>([]);
   const [inlineEditId, setInlineEditId] = React.useState<string | null>(null);
   const [inlineEditValue, setInlineEditValue] = React.useState("了解基础概念");
-  
-  // 使用React.useRef来保存checklists状态，避免切换时丢失
-  const checklistsRef = React.useRef<CategoryChecklist[]>(makeMockData(nodeTitle).categories);
-  const [checklists, setChecklists] = React.useState<CategoryChecklist[]>(checklistsRef.current);
+  const [checklists, setChecklists] = React.useState<CategoryChecklist[]>(() => makeMockData(nodeTitle).categories);
 
   const mockData = React.useMemo(() => makeMockData(nodeTitle) as MockDataResult, [nodeTitle]);
   const activeSource = mockData.sources.find((source: any) => source.id === activeSourceId) ?? null;
 
-  // 只在nodeTitle真正改变时才重置状态
-  const prevNodeTitleRef = React.useRef(nodeTitle);
   React.useEffect(() => {
-    if (prevNodeTitleRef.current !== nodeTitle) {
-      setSearchQuery(nodeTitle);
-      const newChecklists = makeMockData(nodeTitle).categories;
-      checklistsRef.current = newChecklists;
-      setChecklists(newChecklists);
-      setInlineEditValue("了解基础概念");
-      setInlineEditId(null);
-      setActiveSourceId(null);
-      setSidebarStatus("idle");
-      prevNodeTitleRef.current = nodeTitle;
-    }
+    setSearchQuery(nodeTitle);
+    setChecklists(makeMockData(nodeTitle).categories);
+    setInlineEditValue("了解基础概念");
+    setInlineEditId(null);
+    setActiveSourceId(null);
+    setSidebarStatus("idle");
   }, [nodeTitle]);
 
   React.useEffect(() => {
@@ -115,16 +105,16 @@ export function NodeEditorTab({
   };
 
   const updateChecklist = (categoryId: string, itemId: string, completed: boolean) => {
-    const updatedChecklists = checklists.map((category: any) =>
-      category.id !== categoryId
-        ? category
-        : {
-            ...category,
-            items: category.items.map((item: any) => (item.id === itemId ? { ...item, completed } : item)),
-          }
+    setChecklists((current) =>
+      current.map((category: any) =>
+        category.id !== categoryId
+          ? category
+          : {
+              ...category,
+              items: category.items.map((item: any) => (item.id === itemId ? { ...item, completed } : item)),
+            }
+      )
     );
-    checklistsRef.current = updatedChecklists;
-    setChecklists(updatedChecklists);
     onChecklistChange?.({ categoryId, itemId, completed });
   };
 
@@ -136,60 +126,62 @@ export function NodeEditorTab({
       exit={{ opacity: 0, y: -8 }}
       className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-800/80 bg-white/5 backdrop-blur-2xl"
     >
-      <div className="border-b border-slate-800/70 px-5 py-4">
+      <div className="border-b border-slate-800/70 px-5 py-4 shrink-0">
         <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-200/60">Focused Tier-1 Node</p>
         <h2 className="mt-2 truncate text-lg font-semibold text-slate-50">{nodeTitle}</h2>
       </div>
 
-      <div className="flex flex-1 flex-col justify-center gap-5 p-5">
-        <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-          <label className="mb-2 block text-[11px] uppercase tracking-[0.28em] text-slate-400">检索目标</label>
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            className="h-11 border-slate-800 bg-slate-900/80 text-slate-100 placeholder:text-slate-500 focus-visible:border-cyan-500/60 focus-visible:ring-cyan-500/20"
-          />
+      <ScrollArea className="flex-1">
+        <div className="flex flex-col justify-center gap-5 p-5">
+          <div className="rounded-2xl border border-white/10 bg-slate-950/45 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+            <label className="mb-2 block text-[11px] uppercase tracking-[0.28em] text-slate-400">检索目标</label>
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="h-11 border-slate-800 bg-slate-900/80 text-slate-100 placeholder:text-slate-500 focus-visible:border-cyan-500/60 focus-visible:ring-cyan-500/20"
+            />
 
-          <Button
-            onClick={beginSearch}
-            className="mt-4 h-11 w-full border border-cyan-400/30 bg-cyan-400/15 text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.12)] hover:bg-cyan-400/20 hover:text-white"
-          >
-            [🔍 联网检索相关信息]
-          </Button>
-        </div>
+            <Button
+              onClick={beginSearch}
+              className="mt-4 h-11 w-full border border-cyan-400/30 bg-cyan-400/15 text-cyan-100 shadow-[0_0_30px_rgba(34,211,238,0.12)] hover:bg-cyan-400/20 hover:text-white"
+            >
+              [🔍 联网检索相关信息]
+            </Button>
+          </div>
 
-        <div className="rounded-2xl border border-slate-800/70 bg-slate-950/50 p-4">
-          <p className="mb-3 text-[11px] uppercase tracking-[0.28em] text-slate-500">默认子任务</p>
-          <button
-            type="button"
-            onClick={() => setInlineEditId("concept-1")}
-            className="flex w-full items-start gap-3 rounded-xl border border-transparent px-3 py-2 text-left transition-colors hover:border-cyan-500/20 hover:bg-white/5"
-          >
-            <span className="mt-0.5 size-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.6)]" />
-            <div className="min-w-0 flex-1">
-              {inlineEditId === "concept-1" ? (
-                <Input
-                  value={inlineEditValue}
-                  autoFocus
-                  onChange={(event) => setInlineEditValue(event.target.value)}
-                  onBlur={() => setInlineEditId(null)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      setInlineEditId(null);
-                    }
-                  }}
-                  className="h-9 border-slate-800 bg-slate-900/80 text-slate-100"
-                />
-              ) : (
-                <>
-                  <p className="text-sm text-slate-100">{inlineEditValue}</p>
-                  <p className="mt-1 text-xs text-slate-500">点击可直接行内编辑。</p>
-                </>
-              )}
-            </div>
-          </button>
+          <div className="rounded-2xl border border-slate-800/70 bg-slate-950/50 p-4">
+            <p className="mb-3 text-[11px] uppercase tracking-[0.28em] text-slate-500">默认子任务</p>
+            <button
+              type="button"
+              onClick={() => setInlineEditId("concept-1")}
+              className="flex w-full items-start gap-3 rounded-xl border border-transparent px-3 py-2 text-left transition-colors hover:border-cyan-500/20 hover:bg-white/5"
+            >
+              <span className="mt-0.5 size-2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(34,211,238,0.6)]" />
+              <div className="min-w-0 flex-1">
+                {inlineEditId === "concept-1" ? (
+                  <Input
+                    value={inlineEditValue}
+                    autoFocus
+                    onChange={(event) => setInlineEditValue(event.target.value)}
+                    onBlur={() => setInlineEditId(null)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        setInlineEditId(null);
+                      }
+                    }}
+                    className="h-9 border-slate-800 bg-slate-900/80 text-slate-100"
+                  />
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-100">{inlineEditValue}</p>
+                    <p className="mt-1 text-xs text-slate-500">点击可直接行内编辑。</p>
+                  </>
+                )}
+              </div>
+            </button>
+          </div>
         </div>
-      </div>
+      </ScrollArea>
     </motion.div>
   );
 
@@ -201,14 +193,16 @@ export function NodeEditorTab({
       exit={{ opacity: 0, y: -8 }}
       className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/70"
     >
-      <div className="border-b border-slate-800/70 px-5 py-4">
+      <div className="border-b border-slate-800/70 px-5 py-4 shrink-0">
         <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-200/60">Scraping Context</p>
         <h2 className="mt-2 truncate text-lg font-semibold text-slate-50">{nodeTitle}</h2>
       </div>
 
-      <div className="flex-1 p-4">
-        <AILogTicker active entries={MOCK_LOGS} onComplete={handleTickerComplete} />
-      </div>
+      <ScrollArea className="flex-1">
+        <div className="p-4">
+          <AILogTicker active entries={MOCK_LOGS} onComplete={handleTickerComplete} />
+        </div>
+      </ScrollArea>
     </motion.div>
   );
 
@@ -220,7 +214,7 @@ export function NodeEditorTab({
       exit={{ opacity: 0, y: -8 }}
       className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-950/70"
     >
-      <div className="border-b border-slate-800/70 px-5 py-4">
+      <div className="border-b border-slate-800/70 px-5 py-4 shrink-0">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-200/60">Active Node</p>
@@ -238,7 +232,7 @@ export function NodeEditorTab({
           transition={{ duration: 0.28, ease: "easeInOut" }}
           className={cn("absolute inset-0 flex min-h-0 flex-col", activeSourceId && "pointer-events-none")}
         >
-          <ScrollArea className="flex-1 px-4 py-4">
+          <ScrollArea className="h-full px-4 py-4">
             <Accordion
               type="multiple"
               value={openCategoryIds}
@@ -379,7 +373,8 @@ export function NodeEditorTab({
         className
       )}
     >
-      <div className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-4 py-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      {/* Header - 固定部分 */}
+      <div className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-4 py-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] shrink-0">
         <p className="text-[11px] uppercase tracking-[0.32em] text-slate-500">Current Node</p>
         <div className="mt-2 flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-100">
@@ -392,6 +387,7 @@ export function NodeEditorTab({
         </div>
       </div>
 
+      {/* 可滚动内容区域 */}
       <div className="min-h-0 flex-1 overflow-hidden">
         <AnimatePresence mode="wait" initial={false}>
           {sidebarStatus === "idle" ? renderIdleState() : null}
@@ -401,7 +397,7 @@ export function NodeEditorTab({
       </div>
 
       {sidebarStatus === "idle" ? null : (
-        <div className="flex items-center justify-between rounded-2xl border border-slate-800/70 bg-slate-950/60 px-4 py-3 text-[11px] uppercase tracking-[0.28em] text-slate-500">
+        <div className="flex items-center justify-between rounded-2xl border border-slate-800/70 bg-slate-950/60 px-4 py-3 text-[11px] uppercase tracking-[0.28em] text-slate-500 shrink-0">
           <span>Status</span>
           <span>{sidebarStatus}</span>
         </div>
