@@ -41,21 +41,33 @@ export async function ensureUserProfile(session: any) {
 // 辅助函数：使用 Google OAuth 登录
 export async function signInWithGoogle() {
   try {
+    // 获取当前页面的完整URL作为重定向地址
+    // 这样可以确保登录后返回到用户当前所在的页面
+    const currentUrl = window.location.origin + window.location.pathname + window.location.search;
+    
+    console.log('[signInWithGoogle] Initiating Google OAuth with redirect to:', currentUrl);
+    
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: currentUrl,
+        // 可选：添加queryParams以跟踪来源
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
       },
     });
 
     if (error) {
-      console.error('Google signin error:', error);
+      console.error('[signInWithGoogle] Google signin error:', error);
       throw error;
     }
 
+    console.log('[signInWithGoogle] OAuth initiated successfully');
     return data;
   } catch (err) {
-    console.error('Failed to sign in with Google:', err);
+    console.error('[signInWithGoogle] Failed to sign in with Google:', err);
     throw err;
   }
 }

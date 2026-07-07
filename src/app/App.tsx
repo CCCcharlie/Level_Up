@@ -51,6 +51,8 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[App:onAuthStateChange] Auth event:', event);
+      
       if (event === 'SIGNED_IN' && session?.user) {
         const userName =
           session.user.user_metadata?.display_name ||
@@ -60,18 +62,22 @@ export default function App() {
 
         toast.success(t('auth.welcomeBack', { name: userName }));
 
-        if (window.location.hash.includes('access_token=')) {
+        // 清理URL中的OAuth参数（hash或search）
+        if (window.location.hash.includes('access_token=') || window.location.search.includes('code=')) {
           window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+          console.log('[App:onAuthStateChange] Cleaned OAuth parameters from URL');
         }
 
         void (async () => {
           try {
             await ensureUserProfile(session);
+            console.log('[App:onAuthStateChange] User profile ensured');
           } catch (error) {
             console.error('[App:onAuthStateChange] Failed to ensure user profile:', error);
           }
 
           await fetchUserData();
+          console.log('[App:onAuthStateChange] User data fetched');
         })();
 
         return;
